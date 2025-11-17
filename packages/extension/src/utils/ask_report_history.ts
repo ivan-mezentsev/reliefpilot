@@ -112,6 +112,15 @@ class AskReportHistory {
         return this.entries.find((e) => e.id === id)
     }
 
+    /** Remove an entry by id and persist. Returns true when an entry was removed. */
+    removeById(id: string): boolean {
+        const idx = this.entries.findIndex((e) => e.id === id)
+        if (idx === -1) return false
+        this.entries.splice(idx, 1)
+        void this.saveToStorage()
+        return true
+    }
+
     // Trim when setting changes
     applyLimitFromSettings() {
         const max = getMaxEntries()

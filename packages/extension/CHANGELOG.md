@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 - 2025-11-18
+
+- fix(extension): update ai_fetch_url prompt to remove image links
+- feat(extension): add command to show Ask Report history
+- Implemented a method to remove entries from the Ask Report history.
+
 ## 0.1.0 - 2025-11-15
 
 - Initial public release

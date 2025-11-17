@@ -35,6 +35,7 @@ import { openGoogleContentPanelByUid } from './utils/google_search_content_panel
 import { statusBarActivity } from './utils/statusBar';
 
 const STATUS_MENU_COMMAND = 'reliefpilot.status.menu';
+const SHOW_ASK_REPORT_HISTORY_COMMAND = 'reliefpilot.askReport.showHistory';
 const SELECT_AI_FETCH_URL_MODEL_LABEL = 'Select Model for `ai_fetch_url`';
 
 const extensionDisplayName = 'Relief Pilot';
@@ -128,26 +129,7 @@ async function showReliefPilotMenu() {
   } else if (pick.label === SELECT_AI_FETCH_URL_MODEL_LABEL) {
     await selectModelForAiFetchUrl();
   } else if (pick.label === historyMenuLabel || pick.label.startsWith('History "ask_report"')) {
-    const entries = askReportHistory.list();
-    if (!entries || entries.length === 0) {
-      vscode.window.showInformationMessage('No ask_report history yet.');
-      return;
-    }
-    const picks = entries.map((e): (vscode.QuickPickItem & { id: string }) => ({
-      id: e.id,
-      label: `${formatTimestampSeconds(e.timestamp)} ${e.topic}`,
-      description: undefined,
-      detail: undefined,
-    }));
-    const chosen = await vscode.window.showQuickPick(picks, {
-      placeHolder: 'Select an ask_report entry to view',
-      ignoreFocusOut: true,
-    });
-    if (!chosen) return;
-    const entry = askReportHistory.getById(chosen.id);
-    if (!entry) return;
-    // Focus existing or open read-only viewer for selected entry by id
-    await openOrFocusAskReportById(entry.id);
+    await showAskReportHistoryMenu();
   } else if (pick.label === 'Create Specs Mode') {
     await vscode.commands.executeCommand(CREATE_SPECS_MODE_COMMAND);
   } else if (pick.label === tokenMenuLabel) {
@@ -159,6 +141,74 @@ async function showReliefPilotMenu() {
   } else if (pick.label === googleSearchEngineIdMenuLabel) {
     await setupOrUpdateGoogleSearchEngineId();
   }
+}
+
+async function showAskReportHistoryMenu() {
+  const refreshItems = (): Array<vscode.QuickPickItem & { id: string }> => {
+    const entries = askReportHistory.list();
+    return entries.map((e) => ({
+      id: e.id,
+      label: `${formatTimestampSeconds(e.timestamp)} ${e.topic}`,
+      buttons: [deleteButton],
+    }));
+  };
+
+  const deleteButton: vscode.QuickInputButton = {
+    iconPath: new vscode.ThemeIcon('trash'),
+    tooltip: 'Delete this entry',
+  };
+
+  const entries = askReportHistory.list();
+  if (!entries || entries.length === 0) {
+    vscode.window.showInformationMessage('No ask_report history yet.');
+    return;
+  }
+
+  const qp = vscode.window.createQuickPick<vscode.QuickPickItem & { id: string }>();
+  qp.title = 'Ask Report History';
+  qp.placeholder = 'Select an ask_report entry to view';
+  qp.ignoreFocusOut = true;
+  qp.items = refreshItems();
+
+  const dispose = () => {
+    try { qp.hide(); } catch { }
+    try { qp.dispose(); } catch { }
+  };
+
+  qp.onDidTriggerItemButton((e) => {
+    if (e.button === deleteButton) {
+      const id = (e.item as any).id as string | undefined;
+      if (!id) return;
+      const ok = askReportHistory.removeById(id);
+      if (ok) {
+        const next = refreshItems();
+        if (next.length === 0) {
+          vscode.window.showInformationMessage('No ask_report history left.');
+          dispose();
+          return;
+        }
+        qp.items = next;
+      }
+    }
+  });
+
+  qp.onDidAccept(async () => {
+    const chosen = qp.selectedItems[0] as (vscode.QuickPickItem & { id?: string }) | undefined;
+    if (!chosen || !chosen.id) {
+      dispose();
+      return;
+    }
+    const entry = askReportHistory.getById(chosen.id);
+    dispose();
+    if (!entry) return;
+    await openOrFocusAskReportById(entry.id);
+  });
+
+  qp.onDidHide(() => {
+    dispose();
+  });
+
+  qp.show();
 }
 
 async function selectModelForAiFetchUrl() {
@@ -505,6 +555,8 @@ export const activate = async (context: vscode.ExtensionContext) => {
   // Register command that the status bar item invokes to show the Relief Pilot menu
   context.subscriptions.push(
     vscode.commands.registerCommand(STATUS_MENU_COMMAND, () => showReliefPilotMenu()),
+    // Public command to open ask_report history menu (bindable to keybindings)
+    vscode.commands.registerCommand(SHOW_ASK_REPORT_HISTORY_COMMAND, () => showAskReportHistoryMenu()),
     // Internal command (not contributed) for possible programmatic usage/tests
     vscode.commands.registerCommand('reliefpilot.context7.setupToken', () => setupOrUpdateContext7Token()),
     vscode.commands.registerCommand('reliefpilot.github.setupToken', () => setupOrUpdateGitHubToken()),
