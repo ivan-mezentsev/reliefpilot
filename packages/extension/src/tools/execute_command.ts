@@ -62,7 +62,7 @@ export class ExecuteCommandTool {
 
   constructor(cwd: string) {
     this.cwd = cwd
-    this.terminalManager = new TerminalManager()
+    this.terminalManager = TerminalManager.getInstance()
   }
 
   async execute(
