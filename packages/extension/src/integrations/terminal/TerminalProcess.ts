@@ -22,21 +22,10 @@ export interface TerminalProcessEvents {
 	no_shell_integration: []
 }
 
-// how long to wait after a process outputs anything before we consider it "cool" again
-const PROCESS_HOT_TIMEOUT_NORMAL = 2_000
-const PROCESS_HOT_TIMEOUT_COMPILING = 15_000
-
 export class TerminalProcess extends EventEmitter<TerminalProcessEvents> {
 	waitForShellIntegration: boolean = true
 	private isListening: boolean = true
 	private buffer: string = ""
-	private fullOutput: string = ""
-	private lastRetrievedIndex: number = 0
-	isHot: boolean = false
-	private hotTimer: NodeJS.Timeout | null = null
-
-	// constructor() {
-	// 	super()
 
 	async run(terminal: vscode.Terminal, command: string) {
 		if (terminal.shellIntegration && terminal.shellIntegration.executeCommand) {
@@ -45,7 +34,6 @@ export class TerminalProcess extends EventEmitter<TerminalProcessEvents> {
 			// todo: need to handle errors
 			let isFirstChunk = true
 			let didOutputNonCommand = false
-			let didEmitEmptyLine = false
 			for await (let data of stream) {
 				// 1. Process chunk and remove artifacts
 				if (isFirstChunk) {
@@ -125,58 +113,12 @@ export class TerminalProcess extends EventEmitter<TerminalProcessEvents> {
 				// FIXME: right now it seems that data chunks returned to us from the shell integration stream contains random commas, which from what I can tell is not the expected behavior. There has to be a better solution here than just removing all commas.
 				data = data.replace(/,/g, "")
 
-				// 2. Set isHot depending on the command
-				// Set to hot to stall API requests until terminal is cool again
-				this.isHot = true
-				if (this.hotTimer) {
-					clearTimeout(this.hotTimer)
-				}
-				// these markers indicate the command is some kind of local dev server recompiling the app, which we want to wait for output of before sending request to cline
-				const compilingMarkers = ["compiling", "building", "bundling", "transpiling", "generating", "starting"]
-				const markerNullifiers = [
-					"compiled",
-					"success",
-					"finish",
-					"complete",
-					"succeed",
-					"done",
-					"end",
-					"stop",
-					"exit",
-					"terminate",
-					"error",
-					"fail",
-				]
-				const isCompiling =
-					compilingMarkers.some((marker) => data.toLowerCase().includes(marker.toLowerCase())) &&
-					!markerNullifiers.some((nullifier) => data.toLowerCase().includes(nullifier.toLowerCase()))
-				this.hotTimer = setTimeout(
-					() => {
-						this.isHot = false
-					},
-					isCompiling ? PROCESS_HOT_TIMEOUT_COMPILING : PROCESS_HOT_TIMEOUT_NORMAL,
-				)
-
-				// For non-immediately returning commands we want to show loading spinner right away but this wouldnt happen until it emits a line break, so as soon as we get any output we emit "" to let webview know to show spinner
-				if (!didEmitEmptyLine && !this.fullOutput && data) {
-					this.emit("line", "") // empty line to indicate start of command output stream
-					didEmitEmptyLine = true
-				}
-
-				this.fullOutput += data
 				if (this.isListening) {
 					this.emitIfEol(data)
-					this.lastRetrievedIndex = this.fullOutput.length - this.buffer.length
 				}
 			}
 
 			this.emitRemainingBufferIfListening()
-
-			// for now we don't want this delaying requests since we don't send diagnostics automatically anymore (previous: "even though the command is finished, we still want to consider it 'hot' in case so that api request stalls to let diagnostics catch up")
-			if (this.hotTimer) {
-				clearTimeout(this.hotTimer)
-			}
-			this.isHot = false
 
 			this.emit("completed")
 			this.emit("continue")
@@ -216,7 +158,6 @@ export class TerminalProcess extends EventEmitter<TerminalProcessEvents> {
 				this.emit("line", remainingBuffer)
 			}
 			this.buffer = ""
-			this.lastRetrievedIndex = this.fullOutput.length
 		}
 	}
 
@@ -225,12 +166,6 @@ export class TerminalProcess extends EventEmitter<TerminalProcessEvents> {
 		this.isListening = false
 		this.removeAllListeners("line")
 		this.emit("continue")
-	}
-
-	getUnretrievedOutput(): string {
-		const unretrieved = this.fullOutput.slice(this.lastRetrievedIndex)
-		this.lastRetrievedIndex = this.fullOutput.length
-		return this.removeLastLineArtifacts(unretrieved)
 	}
 
 	// some processing to remove artifacts like '%' at the end of the buffer (it seems that since vsode uses % at the beginning of newlines in terminal, it makes its way into the stream)

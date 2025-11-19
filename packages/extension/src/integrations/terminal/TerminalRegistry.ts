@@ -50,6 +50,10 @@ export class TerminalRegistry {
 		return terminalInfo
 	}
 
+	static getTerminalByInstance(terminal: vscode.Terminal): TerminalInfo | undefined {
+		return this.terminals.find((t) => t.terminal === terminal)
+	}
+
 	static updateTerminal(id: number, updates: Partial<TerminalInfo>) {
 		const terminal = this.getTerminal(id)
 		if (terminal) {

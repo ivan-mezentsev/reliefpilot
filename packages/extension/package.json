@@ -3,7 +3,7 @@
   "displayName": "Relief Pilot",
   "description": "A VSCode extension for missing capabilities required by AI agents and enabling advanced control.",
   "publisher": "ivan-mezentsev",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "commonjs",
   "icon": "icon.png",
   "categories": [

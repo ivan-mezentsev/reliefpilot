@@ -93,11 +93,12 @@ declare module "vscode" {
 }
 
 export class TerminalManager {
+	private static instance: TerminalManager | null = null
 	private terminalIds: Set<number> = new Set()
 	private processes: Map<number, TerminalProcess> = new Map()
 	private disposables: vscode.Disposable[] = []
 
-	constructor() {
+	private constructor() {
 		let disposable: vscode.Disposable | undefined
 		try {
 			disposable = (vscode.window as vscode.Window).onDidStartTerminalShellExecution?.(async (e) => {
@@ -110,6 +111,32 @@ export class TerminalManager {
 		if (disposable) {
 			this.disposables.push(disposable)
 		}
+
+		this.disposables.push(
+			vscode.window.onDidCloseTerminal((terminal) => {
+				try {
+					const terminalInfo = TerminalRegistry.getTerminalByInstance(terminal)
+					if (terminalInfo) {
+						const process = this.processes.get(terminalInfo.id)
+						if (process) {
+							process.emit("continue")
+						}
+						this.terminalIds.delete(terminalInfo.id)
+						this.processes.delete(terminalInfo.id)
+						TerminalRegistry.removeTerminal(terminalInfo.id)
+					}
+				} catch (error) {
+					console.error("Error handling terminal closure:", error)
+				}
+			}),
+		)
+	}
+
+	static getInstance(): TerminalManager {
+		if (!TerminalManager.instance) {
+			TerminalManager.instance = new TerminalManager()
+		}
+		return TerminalManager.instance
 	}
 
 	runCommand(terminalInfo: TerminalInfo, command: string): TerminalProcessResultPromise {
@@ -200,19 +227,6 @@ export class TerminalManager {
 			.map((id) => TerminalRegistry.getTerminal(id))
 			.filter((t): t is TerminalInfo => t !== undefined && t.busy === busy)
 			.map((t) => ({ id: t.id, lastCommand: t.lastCommand }))
-	}
-
-	getUnretrievedOutput(terminalId: number): string {
-		if (!this.terminalIds.has(terminalId)) {
-			return ""
-		}
-		const process = this.processes.get(terminalId)
-		return process ? process.getUnretrievedOutput() : ""
-	}
-
-	isProcessHot(terminalId: number): boolean {
-		const process = this.processes.get(terminalId)
-		return process ? process.isHot : false
 	}
 
 	disposeAll() {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 - 2025-11-19
+
+- refactor(terminal): use singleton and cleanup terminals on close
+- docs(extension): add HARDMUST rule for autonomous long-running services
+- refactor(terminal): use singleton and cleanup terminals on close
+
 ## 0.1.1 - 2025-11-18
 
 - fix(extension): update ai_fetch_url prompt to remove image links
