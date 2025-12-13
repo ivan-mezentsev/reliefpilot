@@ -10,6 +10,7 @@ import { ExecuteCommandLanguageModelTool } from './tools/execute_command';
 import { FeloSearchTool } from './tools/felo_search';
 import { FocusEditorLanguageModelTool } from './tools/focus_editor';
 import { GetTerminalOutputLanguageModelTool } from './tools/get_terminal_output';
+import { GithubGetDirectoryContentsTool } from './tools/github_get_directory_contents';
 import { GithubGetFileContentsTool } from './tools/github_get_file_contents';
 import { GithubGetLatestReleaseTool } from './tools/github_get_latest_release';
 import { GithubIssueReadTool } from './tools/github_issue_read';
@@ -419,6 +420,19 @@ export const activate = async (context: vscode.ExtensionContext) => {
     } catch (err) {
       outputChannel.appendLine(
         `Failed to register language model tool github_get_file_contents: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    try {
+      const disposable = vscode.lm.registerTool(
+        'github_get_directory_contents',
+        new GithubGetDirectoryContentsTool(),
+      );
+      context.subscriptions.push(disposable);
+      outputChannel.appendLine('Registered language model tool: github_get_directory_contents.');
+    } catch (err) {
+      outputChannel.appendLine(
+        `Failed to register language model tool github_get_directory_contents: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
