@@ -60,6 +60,7 @@ Can you check the docs and explain how the project works? #ask_report
 - Searching and Reading Data via GitHub API:
   - **github_search_repositories**
   - **github_get_file_contents**
+  - **github_get_directory_contents**
   - **github_list_pull_requests**
   - **github_pull_request_read**
   - **github_search_code**
