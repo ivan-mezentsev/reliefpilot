@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 - 2025-12-13
+
+- feat(github): add GitHub directory contents tool
+- feat(ai_fetch_url): enhance system prompt for topic extraction
+
 ## 0.2.1 - 2025-11-24
 
 - refactor(ai_fetch_sessions): enhance session management and lifecycle states
