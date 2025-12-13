@@ -42,7 +42,16 @@ function normalizeString(name: string, raw?: string): string {
 
 function normalizeOptionalPath(raw?: string): string | undefined {
     if (!raw || typeof raw !== 'string') return undefined
-    const t = raw.trim()
+    let t = raw.trim()
+    if (t.length === 0) return undefined
+
+    // Normalize common user inputs:
+    // - Leading slashes are not part of the GitHub "contents" path
+    // - Trailing slashes may trigger API canonicalization/redirect that can drop the `ref` query
+    // - A pure "/" (or multiple slashes) should mean repository root
+    t = t.replace(/^\/+/, '')
+    t = t.replace(/\/+$/, '')
+
     return t.length === 0 ? undefined : t
 }
 
@@ -118,7 +127,7 @@ function formatDirectoryListing(
 ): string {
     const shownPath = path ?? '/'
     const headerLines: string[] = []
-    headerLines.push(`GitHub Directory Contents`)
+    headerLines.push('GitHub Directory Contents')
     headerLines.push('')
     headerLines.push(`- Repo: ${owner}/${repo}`)
     headerLines.push(`- Path: ${shownPath}`)
@@ -175,7 +184,7 @@ export class GithubGetDirectoryContentsTool implements LanguageModelTool<GithubG
         statusBarActivity.start('github')
         const owner = options.input?.owner ?? '<missing-owner>'
         const repo = options.input?.repo ?? '<missing-repo>'
-        const p = options.input?.path ?? '/'
+        const p = normalizeOptionalPath(options.input?.path) ?? '/'
         const ref = options.input?.ref
 
         const md = new vscode.MarkdownString(undefined, true)
