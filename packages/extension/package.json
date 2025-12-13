@@ -3,7 +3,7 @@
   "displayName": "Relief Pilot",
   "description": "A VSCode extension for missing capabilities required by AI agents and enabling advanced control.",
   "publisher": "ivan-mezentsev",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "commonjs",
   "icon": "icon.png",
   "categories": [
@@ -344,7 +344,9 @@
               "description": "Library name to search for and retrieve a Context7-compatible library ID."
             }
           },
-          "required": ["libraryName"]
+          "required": [
+            "libraryName"
+          ]
         }
       },
       {
@@ -370,7 +372,9 @@
               "description": "Maximum number of tokens of documentation to retrieve (default: 6000). Higher values provide more context but consume more tokens."
             }
           },
-          "required": ["context7CompatibleLibraryID"]
+          "required": [
+            "context7CompatibleLibraryID"
+          ]
         }
       },
       {
@@ -392,7 +396,9 @@
               "description": "Number of items per page (max 100)."
             }
           },
-          "required": ["query"]
+          "required": [
+            "query"
+          ]
         }
       },
       {
@@ -422,7 +428,44 @@
               "description": "The name of the commit/branch/tag."
             }
           },
-          "required": ["owner", "repo", "path"]
+          "required": [
+            "owner",
+            "repo",
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "github_get_directory_contents",
+        "displayName": "GitHub: Get directory contents",
+        "modelDescription": "List directory contents from a GitHub repository via GitHub Contents API.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "github_get_directory_contents",
+        "icon": "icon.png",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "owner": {
+              "type": "string",
+              "description": "Repository owner (organization or user)."
+            },
+            "repo": {
+              "type": "string",
+              "description": "Repository name."
+            },
+            "path": {
+              "type": "string",
+              "description": "Path to the directory within the repository. Omit or pass empty for repository root."
+            },
+            "ref": {
+              "type": "string",
+              "description": "The name of the commit/branch/tag."
+            }
+          },
+          "required": [
+            "owner",
+            "repo"
+          ]
         }
       },
       {
@@ -472,7 +515,10 @@
               "description": "Page number (1-based)."
             }
           },
-          "required": ["owner", "repo"]
+          "required": [
+            "owner",
+            "repo"
+          ]
         }
       },
       {
@@ -510,7 +556,12 @@
               "description": "Page number (1-based)."
             }
           },
-          "required": ["method", "owner", "repo", "pull_number"]
+          "required": [
+            "method",
+            "owner",
+            "repo",
+            "pull_number"
+          ]
         }
       },
       {
@@ -532,7 +583,9 @@
               "description": "Number of items per page (max 100)."
             }
           },
-          "required": ["query"]
+          "required": [
+            "query"
+          ]
         }
       },
       {
@@ -558,7 +611,10 @@
               "description": "Number of items per page (max 100)."
             }
           },
-          "required": ["owner", "repo"]
+          "required": [
+            "owner",
+            "repo"
+          ]
         }
       },
       {
@@ -580,7 +636,10 @@
               "description": "Repository name."
             }
           },
-          "required": ["owner", "repo"]
+          "required": [
+            "owner",
+            "repo"
+          ]
         }
       },
       {
@@ -602,7 +661,9 @@
               "description": "Number of items per page (max 100)."
             }
           },
-          "required": ["query"]
+          "required": [
+            "query"
+          ]
         }
       },
       {
@@ -628,7 +689,10 @@
               "description": "Number of items per page (max 100)."
             }
           },
-          "required": ["owner", "repo"]
+          "required": [
+            "owner",
+            "repo"
+          ]
         }
       },
       {
@@ -654,7 +718,11 @@
               "description": "Issue number."
             }
           },
-          "required": ["owner", "repo", "issue_number"]
+          "required": [
+            "owner",
+            "repo",
+            "issue_number"
+          ]
         }
       },
       {
@@ -716,7 +784,9 @@
               "description": "Sorting method for search results. Options: 'relevance' (default) or 'date' (most recent first)."
             }
           },
-          "required": ["query"]
+          "required": [
+            "query"
+          ]
         }
       },
       {
@@ -747,7 +817,9 @@
               "maximum": 20
             }
           },
-          "required": ["query"]
+          "required": [
+            "query"
+          ]
         }
       },
       {
@@ -765,7 +837,9 @@
               "description": "The search query or prompt"
             }
           },
-          "required": ["query"]
+          "required": [
+            "query"
+          ]
         }
       }
     ]
