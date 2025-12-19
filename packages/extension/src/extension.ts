@@ -92,7 +92,7 @@ async function showReliefPilotMenu() {
     },
     {
       label: SELECT_AI_FETCH_URL_MODEL_LABEL,
-      description: 'Set model via vendor filtered selection (copilot) and store it in settings',
+      description: 'Select from all available VS Code chat models and store it in settings',
     },
     {
       label: historyMenuLabel,
@@ -225,16 +225,26 @@ async function selectModelForAiFetchUrl() {
   }
   let models: vscode.LanguageModelChat[] = [];
   try {
-    models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+    // When selector is omitted, VS Code returns all available chat models across all providers.
+    models = await vscode.lm.selectChatModels();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     vscode.window.showErrorMessage(`Failed to resolve available models: ${message}`);
     return;
   }
   if (!models || models.length === 0) {
-    vscode.window.showInformationMessage('No Copilot chat models available.');
+    vscode.window.showInformationMessage('No chat models available.');
     return;
   }
+
+  // Make the list stable and easier to scan.
+  models = [...models].sort((a, b) => {
+    const av = (a.vendor ?? '').localeCompare(b.vendor ?? '');
+    if (av !== 0) return av;
+    const an = (a.name ?? '').localeCompare(b.name ?? '');
+    if (an !== 0) return an;
+    return (a.id ?? '').localeCompare(b.id ?? '');
+  });
 
   // Read currently selected model from settings and mark it in the pick list
   const config = vscode.workspace.getConfiguration('reliefpilot');
@@ -242,7 +252,9 @@ async function selectModelForAiFetchUrl() {
 
   const picks = models.map((m): vscode.QuickPickItem & { id: string } => ({
     id: m.id,
-    label: `${m.id}${m.id === currentModelId ? ' [Selected]' : ''}`,
+    label: `${m.vendor} · ${m.name}${m.id === currentModelId ? ' [Selected]' : ''}`,
+    description: `${m.family}${m.version ? ` · ${m.version}` : ''}`,
+    detail: `id: ${m.id}`,
   }));
 
   const chosen = await vscode.window.showQuickPick(picks, {
