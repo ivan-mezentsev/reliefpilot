@@ -9,7 +9,7 @@ import type {
 } from 'vscode';
 import * as vscode from 'vscode';
 import { LanguageModelTextPart, LanguageModelToolResult } from 'vscode';
-import { createSession, getSession } from '../utils/ai_fetch_sessions';
+import { createSession, finalizeSession, getSession } from '../utils/ai_fetch_sessions';
 import { env } from '../utils/env';
 import { statusBarActivity } from '../utils/statusBar';
 
@@ -228,6 +228,15 @@ async function prepareContentWithinBudget(content: string, systemPrompt: string,
 
 export class AiFetchUrlLanguageModelTool implements LanguageModelTool<AiFetchUrlInput> {
     private _pendingUids: string[] = [];
+
+    private formatToolErrorMessage(error: unknown): string {
+        const raw = error instanceof Error ? error.message : String(error);
+        if (raw.startsWith(`${TOOL_NAME} error:`)) {
+            return raw;
+        }
+        return `${TOOL_NAME} error: ${raw}`;
+    }
+
     // Retrieve configuration settings once
     private getConfig() {
         const config = vscode.workspace.getConfiguration('reliefpilot');
@@ -353,13 +362,17 @@ export class AiFetchUrlLanguageModelTool implements LanguageModelTool<AiFetchUrl
     ): Promise<LanguageModelToolResult> {
         statusBarActivity.start(TOOL_NAME);
 
+        // Always consume the pending UID early so prepareInvocation() link stays in sync even on errors.
+        const uid = this._pendingUids.length > 0
+            ? this._pendingUids.shift()!
+            : randomUUID();
+
+        // Reuse session created during prepareInvocation (status: pending), if any.
+        let session = getSession(uid);
+
         try {
             const target = normalizeUrl(options.input?.url);
             const topic = normalizeTopic(options.input?.topic);
-            // Resolve UID from prepareInvocation (FIFO)
-            const uid = this._pendingUids.length > 0
-                ? this._pendingUids.shift()!
-                : randomUUID();
             // Resolve model metadata once for this invocation so it can be shown in the progress panel header.
             // These values are treated as required for the ai_fetch_url workflow.
             if (!vscode.lm) {
@@ -384,7 +397,6 @@ export class AiFetchUrlLanguageModelTool implements LanguageModelTool<AiFetchUrl
             const contentMaxLength = Math.max(1, Math.floor(sessionModelMaxInputTokens * APPROX_CHARS_PER_TOKEN * 0.95));
 
             // Reuse session created during prepareInvocation (status: pending) or create if missing.
-            let session = getSession(uid);
             if (!session) {
                 session = createSession(uid, target.toString(), topic, sessionModelId, sessionModelMaxInputTokens);
             } else {
@@ -462,7 +474,20 @@ export class AiFetchUrlLanguageModelTool implements LanguageModelTool<AiFetchUrl
                 subscription.dispose();
             }
         } catch (error) {
-            return this.sendError(error);
+            const message = this.formatToolErrorMessage(error);
+            if (session) {
+                // Surface the error in the progress panel (left column) and stop the stream timer.
+                try {
+                    session.leftBuffer = message;
+                    session.leftEmitter.fire(session.leftBuffer);
+                } catch { /* ignore */ }
+                try {
+                    finalizeSession(uid);
+                } catch { /* ignore */ }
+            }
+
+            // Preserve existing error envelope format for chat/tool callers.
+            throw new Error(message);
         } finally {
             statusBarActivity.end(TOOL_NAME);
         }

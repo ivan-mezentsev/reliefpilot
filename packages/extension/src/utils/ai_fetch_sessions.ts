@@ -64,7 +64,7 @@ class AiFetchSessionManager {
                 const rightDoneEmitter = new vscode.EventEmitter<void>();
                 return {
                     ...s,
-                    status: s.status ?? 'done', // Loaded sessions are already completed
+                    status: 'done', // Loaded sessions are already completed
                     leftEmitter,
                     rightTextEmitter,
                     rightDoneEmitter,
@@ -169,20 +169,24 @@ class AiFetchSessionManager {
 
     finalizeSession(uid: string) {
         const session = this.sessions.find(s => s.uid === uid);
-        if (session) {
-            // Ensure emitters are disposed?
-            // The tool calls dispose() which disposes emitters.
-            // We just need to save the final state.
-            void this.saveToStorage();
+        if (!session) return;
 
-            // We also call dispose() here to be sure?
-            // If we call dispose(), emitters are dead.
-            // If the tool hasn't finished writing, that's bad.
-            // But finalizeSession is called when tool is DONE.
-            // So it's safe to dispose.
-            session.status = 'done';
-            session.dispose();
+        // Idempotency: callers may finalize from multiple code paths (success/error/cancellation).
+        if (session.status === 'done') return;
+
+        // Mark completion time for UI (prevents progress timer from running forever on late-open panels).
+        if (typeof session.finishedAt !== 'number' || !isFinite(session.finishedAt)) {
+            session.finishedAt = Date.now();
         }
+
+        // Signal completion to any open progress panel before disposing emitters/panel.
+        try { session.rightDoneEmitter.fire(); } catch { /* ignore */ }
+
+        session.status = 'done';
+        void this.saveToStorage();
+
+        // Release resources (emitters + associated webview panel).
+        try { session.dispose(); } catch { /* ignore */ }
     }
 
     // Apply current limit from settings dynamically (configuration watcher).
