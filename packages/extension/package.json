@@ -1,24 +1,55 @@
 {
   "name": "reliefpilot",
   "displayName": "Relief Pilot",
-  "description": "A VSCode extension for missing capabilities required by AI agents and enabling advanced control.",
+  "description": "A Swiss Army knife for AI agents in VS Code: safer tool calling, human-in-the-loop approvals, and smarter doc fetching to boost productivity and save you money.",
   "publisher": "ivan-mezentsev",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "commonjs",
   "icon": "icon.png",
   "categories": [
+    "Machine Learning",
     "Other"
   ],
   "keywords": [
-    "VSCode",
-    "Terminal",
-    "tools",
     "reliefpilot",
+    "vscode",
+    "copilot",
+    "github copilot",
+    "copilot chat",
+    "copilot agent",
+    "agent mode",
+    "ai",
+    "llm",
+    "ai agent",
+    "tool calling",
+    "language model tools",
+    "mcp",
+    "model context protocol",
+    "context7",
+    "human in the loop",
     "ask_report",
     "ai_fetch_url",
-    "Human In The Loop",
-    "Language Model Tools"
+    "safe terminal",
+    "terminal",
+    "confirmation",
+    "approval",
+    "prompt",
+    "specs",
+    "ears",
+    "workflow",
+    "automation",
+    "documentation",
+    "docs",
+    "tooling"
   ],
+  "galleryBanner": {
+    "color": "#0f172a",
+    "theme": "dark"
+  },
+  "sponsor": {
+    "url": "https://www.buymeacoffee.com/ivan.mezentsev"
+  },
+  "pricing": "Free",
   "files": [
     "dist/**",
     "media/**",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 - 2025-12-19
+
+- chore(package): update description
+
 ## 0.3.1 - 2025-12-19
 
 - feat(ai_fetch_url): unfiltered model selection
