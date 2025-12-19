@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 - 2025-12-19
+
+- feat(ai_fetch_url): unfiltered model selection
+- refactor(ai_fetch_sessions): improve session finalization and error handling
+
 ## 0.3.0 - 2025-12-13
 
 - feat(github): add GitHub directory contents tool
