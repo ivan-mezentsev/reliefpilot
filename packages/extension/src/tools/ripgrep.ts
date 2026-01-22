@@ -28,6 +28,7 @@ export const ripgrepInputSchema = z.object({
   cwd: z.string().optional().describe('Working directory (defaults to workspace root).'),
   fixedStrings: z.boolean().optional().default(false).describe('Use fixed strings (-F).'),
   caseMode: z.enum(['sensitive', 'ignore', 'smart']).optional().describe('Case matching mode.'),
+  detail: z.enum(['summary', 'files', 'lines', 'lines+submatches']).optional().default('lines'),
   glob: z.array(z.string()).optional().describe('Glob patterns mapped to --glob.'),
   type: z.array(z.string()).optional().describe('File types mapped to --type.'),
   typeNot: z.array(z.string()).optional().describe('File types mapped to --type-not.'),
@@ -53,7 +54,7 @@ interface RipgrepMatch {
   path: string;
   line_number: number;
   lines: string;
-  submatches: RipgrepSubmatch[];
+  submatches?: RipgrepSubmatch[];
 }
 
 interface RipgrepContextLine {
@@ -71,6 +72,7 @@ interface RipgrepSummary {
 
 interface RipgrepResult {
   tool: 'ripgrep';
+  detail: 'summary' | 'files' | 'lines' | 'lines+submatches';
   found: boolean;
   cancelled: boolean;
   timedOut: boolean;
@@ -83,8 +85,9 @@ interface RipgrepResult {
     timeoutMs: number;
   };
   summary: RipgrepSummary;
-  matches: RipgrepMatch[];
-  context: RipgrepContextLine[];
+  files?: string[];
+  matches?: RipgrepMatch[];
+  context?: RipgrepContextLine[];
   stderr?: string;
   exitCode?: number | null;
   signal?: NodeJS.Signals | null;
@@ -198,6 +201,7 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
   if (token.isCancellationRequested) {
     return {
       tool: 'ripgrep',
+      detail: input.detail,
       found: false,
       cancelled: true,
       timedOut: false,
@@ -209,8 +213,7 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
         timeoutMs: input.timeoutMs,
       },
       summary: { filesWithMatches: 0, matchCount: 0, elapsed: null },
-      matches: [],
-      context: [],
+      files: input.detail === 'files' ? [] : undefined,
     };
   }
 
@@ -220,9 +223,11 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
   const matches: RipgrepMatch[] = [];
   const context: RipgrepContextLine[] = [];
   const fileSet = new Set<string>();
+  const filesList: string[] = [];
   let summaryData: unknown;
 
   let found = false;
+  let matchCount = 0;
   let cancelled = false;
   let timedOut = false;
   let truncated = false;
@@ -276,11 +281,7 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
     if (message.type === 'match') {
       const data = message.data ?? {};
       const path = decodeTextOrBytes(data.path);
-      const lines = decodeTextOrBytes(data.lines);
-      const lineNumber = typeof data.line_number === 'number' ? data.line_number : undefined;
-      if (!path || typeof lines !== 'string' || typeof lineNumber !== 'number') {
-        return;
-      }
+      if (!path) return;
 
       if (!fileSet.has(path)) {
         if (fileSet.size + 1 > input.maxFiles) {
@@ -288,35 +289,55 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
           return;
         }
         fileSet.add(path);
+        if (input.detail === 'files') {
+          filesList.push(path);
+        }
       }
 
-      const submatches: RipgrepSubmatch[] = Array.isArray(data.submatches)
-        ? data.submatches
-          .map((sm: any): RipgrepSubmatch | undefined => {
-            const matchText = decodeTextOrBytes(sm?.match);
-            const start = typeof sm?.start === 'number' ? sm.start : undefined;
-            const end = typeof sm?.end === 'number' ? sm.end : undefined;
-            if (typeof matchText !== 'string' || typeof start !== 'number' || typeof end !== 'number') {
-              return undefined;
-            }
-            return { match: matchText, start, end };
-          })
-          .filter((sm: RipgrepSubmatch | undefined): sm is RipgrepSubmatch => Boolean(sm))
-        : [];
-
-      matches.push({
-        path,
-        line_number: lineNumber,
-        lines,
-        submatches,
-      });
-
+      matchCount += 1;
       found = true;
+      const reachedMatchLimit = matchCount >= input.maxMatches;
 
-      if (matches.length >= input.maxMatches) {
+      if (input.detail === 'lines' || input.detail === 'lines+submatches') {
+        const lines = decodeTextOrBytes(data.lines);
+        const lineNumber = typeof data.line_number === 'number' ? data.line_number : undefined;
+        if (typeof lines !== 'string' || typeof lineNumber !== 'number') {
+          return;
+        }
+
+        const submatches: RipgrepSubmatch[] | undefined = input.detail === 'lines+submatches' && Array.isArray(data.submatches)
+          ? data.submatches
+            .map((sm: any): RipgrepSubmatch | undefined => {
+              const matchText = decodeTextOrBytes(sm?.match);
+              const start = typeof sm?.start === 'number' ? sm.start : undefined;
+              const end = typeof sm?.end === 'number' ? sm.end : undefined;
+              if (typeof matchText !== 'string' || typeof start !== 'number' || typeof end !== 'number') {
+                return undefined;
+              }
+              return { match: matchText, start, end };
+            })
+            .filter((sm: RipgrepSubmatch | undefined): sm is RipgrepSubmatch => Boolean(sm))
+          : undefined;
+
+        const match: RipgrepMatch = {
+          path,
+          line_number: lineNumber,
+          lines,
+        };
+        if (submatches && submatches.length > 0) {
+          match.submatches = submatches;
+        }
+        matches.push(match);
+      }
+
+      if (reachedMatchLimit) {
         requestKill('maxMatches');
+        return;
       }
     } else if (message.type === 'context') {
+      if (input.detail !== 'lines' && input.detail !== 'lines+submatches') {
+        return;
+      }
       const data = message.data ?? {};
       const path = decodeTextOrBytes(data.path);
       const lines = decodeTextOrBytes(data.lines);
@@ -420,7 +441,7 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
     if (exitCode === 1) {
       found = false;
     } else if (exitCode === 0) {
-      found = matches.length > 0 || found;
+      found = matchCount > 0 || found;
     } else if (exitCode === 2) {
       const suffix = stderrText
         ? ` stderr: ${stderrText}${stderrTruncated ? '…' : ''}`
@@ -443,13 +464,14 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
 
   const summary: RipgrepSummary = {
     filesWithMatches: fileSet.size,
-    matchCount: matches.length,
+    matchCount,
     elapsed: elapsed ?? null,
     stats,
   };
 
   const result: RipgrepResult = {
     tool: 'ripgrep',
+    detail: input.detail,
     found,
     cancelled,
     timedOut,
@@ -462,8 +484,9 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
       timeoutMs: input.timeoutMs,
     },
     summary,
-    matches,
-    context,
+    files: input.detail === 'files' ? filesList : undefined,
+    matches: (input.detail === 'lines' || input.detail === 'lines+submatches') ? matches : undefined,
+    context: (input.detail === 'lines' || input.detail === 'lines+submatches') ? context : undefined,
     exitCode,
     signal: exitSignal,
   };
@@ -511,6 +534,7 @@ export class RipgrepLanguageModelTool implements LanguageModelTool<RipgrepInput>
     const maxFiles = typeof input.maxFiles === 'number' ? input.maxFiles : DEFAULT_LIMITS.maxFiles;
     const maxOutputChars = typeof input.maxOutputChars === 'number' ? input.maxOutputChars : DEFAULT_LIMITS.maxOutputChars;
     const timeoutMs = typeof input.timeoutMs === 'number' ? input.timeoutMs : DEFAULT_LIMITS.timeoutMs;
+    const detail = typeof input.detail === 'string' ? input.detail : 'lines';
 
     const md = new vscode.MarkdownString(undefined, true);
     md.supportHtml = true;
@@ -524,6 +548,7 @@ export class RipgrepLanguageModelTool implements LanguageModelTool<RipgrepInput>
     if (paths.length > 0) {
       md.appendMarkdown(`- Paths: \`${paths.join(', ')}\`  \n`);
     }
+    md.appendMarkdown(`- Detail: \`${detail}\`  \n`);
     md.appendMarkdown(`- Limits: matches=${maxMatches}, files=${maxFiles}, outputChars=${maxOutputChars}, timeoutMs=${timeoutMs}  \n`);
 
     return { invocationMessage: md };

@@ -351,6 +351,17 @@
                 "smart"
               ]
             },
+            "detail": {
+              "type": "string",
+              "description": "Detail level for results.",
+              "enum": [
+                "summary",
+                "files",
+                "lines",
+                "lines+submatches"
+              ],
+              "default": "lines"
+            },
             "glob": {
               "type": "array",
               "description": "Glob patterns mapped to --glob.",
