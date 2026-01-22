@@ -47,6 +47,8 @@ Can you check the docs and explain how the project works? #ask_report
 - IDE Integration:
   - **code_checker**: Retrieve current diagnostics for your code
   - **focus_editor**: Focus specific locations within files
+- Local Search:
+  - **ripgrep**: Fast, index-independent search that ignores .git/info/exclude rules (uses the rg binary)
 - The Crown Jewel of the Extension:
   - **ask_report**: Prompt the user via a webview using Markdown and optional predefined options.
   - **ai_fetch_url**: Fetching and extracting web content data using a sub-agent
