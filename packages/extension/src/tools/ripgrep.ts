@@ -22,6 +22,32 @@ const DEFAULT_LIMITS = {
 
 const STDERR_MAX_CHARS = 2000;
 
+const RIPGREP_INSTALL_URL = 'https://github.com/BurntSushi/ripgrep?tab=readme-ov-file#installation';
+
+/**
+ * Show a modal asking the user to install ripgrep and wait for a decision.
+ * Returns true if the user pressed OK (retry), false if cancelled.
+ * The message includes a clickable link and an action to open the installation guide.
+ */
+async function promptToInstallRipgrep(): Promise<boolean> {
+  const message = 'ripgrep (rg) is not found on your system. Please install it and press OK to retry. Installation guide: ' + RIPGREP_INSTALL_URL;
+  while (true) {
+    const selection = await vscode.window.showInformationMessage(
+      message,
+      { modal: true, detail: 'ripgrep is used for fast project-wide search.' },
+      'Open installation guide',
+      'OK',
+    );
+
+    if (selection === 'Open installation guide') {
+      await vscode.env.openExternal(vscode.Uri.parse(RIPGREP_INSTALL_URL));
+      continue;
+    }
+    if (selection === 'OK') return true;
+    return false;
+  }
+}
+
 export const ripgrepInputSchema = z.object({
   pattern: z.string().min(1).describe('Pattern to search for.'),
   paths: z.array(z.string()).optional().describe('Paths to search (defaults to workspace root).'),
@@ -192,7 +218,11 @@ const appendWithLimit = (
   return { text: current + addition.slice(0, remaining), truncated: true };
 };
 
-const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promise<RipgrepResult> => {
+const runRipgrep = async (
+  input: RipgrepInput,
+  token: CancellationToken,
+  hasRetried = false,
+): Promise<RipgrepResult> => {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
     throw new Error('No workspace folder is open.');
@@ -412,12 +442,25 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
 
   const timeoutId = setTimeout(() => requestKill('timeout'), input.timeoutMs);
 
+  // Wait for either 'close' or an immediate 'error' (e.g. ENOENT when 'rg' is missing)
   await new Promise<void>((resolve) => {
-    child.on('close', (code, signal) => {
+    const onClose = (code: number | null, signal: NodeJS.Signals | null) => {
       exitCode = code;
       exitSignal = signal;
+      cleanup();
       resolve();
-    });
+    };
+    const onError = (err: Error) => {
+      spawnError = err;
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      child.off('close', onClose);
+      child.off('error', onError);
+    };
+    child.on('close', onClose);
+    child.on('error', onError);
   });
 
   clearTimeout(timeoutId);
@@ -434,6 +477,20 @@ const runRipgrep = async (input: RipgrepInput, token: CancellationToken): Promis
   }
 
   if (spawnError) {
+    // Handle missing binary scenario (ENOENT) by prompting the user with a clickable link
+    const enoent = (spawnError as any)?.code === 'ENOENT' || /ENOENT/i.test(spawnError.message) || /spawn\s+rg\s+ENOENT/i.test(spawnError.message);
+    if (enoent) {
+      if (!hasRetried) {
+        const retry = await promptToInstallRipgrep();
+        if (retry) {
+          // Retry once after the user confirms installation
+          return await runRipgrep(input, token, true);
+        }
+        throw new Error('ripgrep is not installed. User cancelled.');
+      }
+      // Already retried once and still missing
+      throw new Error('ripgrep is still not found after retry.');
+    }
     throw new Error(`Failed to start rg: ${spawnError.message}`);
   }
 

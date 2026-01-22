@@ -116,7 +116,7 @@ Can you check the docs and explain how the project works? #ask_report
       - Run `ripgrep` and collect unique `matches[].path` from the results:
         - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"], contextLines: 0 }
    - ALLOWED: `file_search` is permitted ONLY to discover filenames/paths. It must NEVER be used when an absolute path is already known.
-   
+
    ## Terminal Analysis
 
    - **CRITICAL**: MUST always read and analyze complete terminal output, not just exit code
@@ -167,10 +167,12 @@ Can you check the docs and explain how the project works? #ask_report
 
 4. Stock up on tokens — you'll need them for maximum comfort:
 
-- [context7.com/dashboard](https://context7.com/dashboard)
-- [Google API](https://support.google.com/googleapi/answer/6158862?hl=en)
-- [Google Search Engine ID](https://support.google.com/programmable-search/answer/12499034?hl=en)
-- [Create a GitHub Personal Access Token](https://github.com/settings/personal-access-tokens/new)
+   - [context7.com/dashboard](https://context7.com/dashboard)
+   - [Google API](https://support.google.com/googleapi/answer/6158862?hl=en)
+   - [Google Search Engine ID](https://support.google.com/programmable-search/answer/12499034?hl=en)
+   - [Create a GitHub Personal Access Token](https://github.com/settings/personal-access-tokens/new)
+
+5. Install ripgrep (rg) if not installed: [ripgrep installation](https://github.com/BurntSushi/ripgrep?tab=readme-ov-file#installation)
 
 ## Why Not MCP?
 
