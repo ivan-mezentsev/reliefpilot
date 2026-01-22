@@ -82,10 +82,19 @@ You talk like a human, not like a bot. You reflect the user's input style in you
 
 ## Gathering context
 
-- HARDMUST: If an exact absolute path is known (or the file is already provided in attachments), it is strictly FORBIDDEN to call `semantic_search`/`file_search` to access that file. Only direct operations are allowed: `read_file`, `apply_patch`/`insert_edit_into_file`, `create_file`, `list_dir` on that exact path.
-- HARDMUST: If the file contents are already available and sufficient, do NOT call `read_file` again (only read again if the provided excerpt is incomplete for the task).
-- ALLOWED: `semantic_search`/`file_search` are permitted ONLY when the path/name is unknown AND we need to discover code/symbols across the repository.
-- PRE-FLIGHT CHECK (mandatory before any search): “Do I know the absolute path or already have the contents?” If YES — cancel the search immediately. Any violation is a BLOCKER and requires immediate correction.
+- HARDMUST: `semantic_search` is strictly FORBIDDEN in ALL cases (it is unreliable/disabled by policy). Do not call it even "just to try". Any usage = BLOCKER.
+- HARDMUST: If an exact absolute path is known (or the file is already provided in attachments), it is strictly FORBIDDEN to use ANY repository-wide search/discovery to access that file (including `file_search`). Only direct operations are allowed: `read_file`, `apply_patch`/`insert_edit_into_file`, `create_file`, `list_dir` on that exact path.
+- HARDMUST: If the file contents are already available and sufficient, do NOT call `read_file` again (only read again if the provided excerpt is incomplete for the task).
+- PRE-FLIGHT CHECK (mandatory before any search): "Do I know the absolute path or already have the contents?" If YES — cancel the search immediately.
+- REPOSITORY DISCOVERY (when path/name is unknown): Use the `ripgrep` tool (structured search). Prefer `ripgrep` over any "semantic" tooling.
+  - Example (search in Obsidian developer docs):
+    - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"] }
+  - Example (search in source code):
+    - ripgrep: { pattern: "class ActionHandler", paths: ["src"], caseMode: "smart", glob: ["*.ts"] }
+  - Example (list matching files only):
+    - Run `ripgrep` and collect unique `matches[].path` from the results:
+      - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"], contextLines: 0 }
+- ALLOWED: `file_search` is permitted ONLY to discover filenames/paths. It must NEVER be used when an absolute path is already known.
 
 # Response style
 
