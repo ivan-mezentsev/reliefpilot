@@ -312,6 +312,123 @@
         }
       },
       {
+        "name": "ripgrep",
+        "displayName": "Ripgrep search",
+        "modelDescription": "Search files using ripgrep (rg) with structured JSON output.",
+        "userDescription": "Search the workspace or a folder using ripgrep and return structured JSON results.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "ripgrep",
+        "icon": "icon.png",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "Pattern to search for."
+            },
+            "paths": {
+              "type": "array",
+              "description": "Paths to search (defaults to workspace root).",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Working directory (defaults to workspace root)."
+            },
+            "fixedStrings": {
+              "type": "boolean",
+              "description": "Use fixed strings (-F).",
+              "default": false
+            },
+            "caseMode": {
+              "type": "string",
+              "description": "Case matching mode.",
+              "enum": [
+                "sensitive",
+                "ignore",
+                "smart"
+              ]
+            },
+            "glob": {
+              "type": "array",
+              "description": "Glob patterns mapped to --glob.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "array",
+              "description": "File types mapped to --type.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "typeNot": {
+              "type": "array",
+              "description": "File types mapped to --type-not.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "contextLines": {
+              "type": "number",
+              "description": "Context lines mapped to -C.",
+              "minimum": 0
+            },
+            "maxMatches": {
+              "type": "number",
+              "description": "Maximum number of match records to return.",
+              "default": 2000,
+              "minimum": 1
+            },
+            "maxFiles": {
+              "type": "number",
+              "description": "Maximum number of files with matches to include.",
+              "default": 200,
+              "minimum": 1
+            },
+            "maxOutputChars": {
+              "type": "number",
+              "description": "Maximum combined stdout/stderr characters to read.",
+              "default": 200000,
+              "minimum": 1
+            },
+            "timeoutMs": {
+              "type": "number",
+              "description": "Timeout in milliseconds for the search.",
+              "default": 10000,
+              "minimum": 0
+            },
+            "includeHidden": {
+              "type": "boolean",
+              "description": "Include hidden files (maps to --hidden).",
+              "default": true
+            },
+            "unrestricted": {
+              "type": "number",
+              "description": "Ignore rules level (maps to -u/-uu/-uuu).",
+              "enum": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "default": 3
+            },
+            "followSymlinks": {
+              "type": "boolean",
+              "description": "Follow symlinks (maps to --follow).",
+              "default": false
+            }
+          },
+          "required": [
+            "pattern"
+          ]
+        }
+      },
+      {
         "name": "get_terminal_output",
         "displayName": "Get terminal output",
         "modelDescription": "Retrieve the output from a specific terminal by its ID (default: \"1\").\nThis tool allows you to check the current or historical output of a terminal,\nwhich is particularly useful when working with long-running commands or\ncommands started in background mode with the execute_command tool.",
