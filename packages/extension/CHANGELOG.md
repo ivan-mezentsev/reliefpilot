@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 - 2026-01-22
+
+- feat(ripgrep): add ripgrep language model tool for file searching
+
 ## 0.3.2 - 2025-12-19
 
 - chore(package): update description
