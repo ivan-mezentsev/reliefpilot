@@ -26,16 +26,17 @@ export class TerminalRegistry {
 	private static nextTerminalId = 1
 
 	static createTerminal(cwd?: string | vscode.Uri | undefined): TerminalInfo {
+		const id = this.nextTerminalId++
 		const terminal = vscode.window.createTerminal({
 			cwd,
-			name: "Relief Pilot",
+			name: `Relief Pilot (id:${id})`,
 			iconPath: new vscode.ThemeIcon("reliefpilot-logo"),
 		})
 		const newInfo: TerminalInfo = {
 			terminal,
 			busy: false,
 			lastCommand: "",
-			id: this.nextTerminalId++,
+			id,
 		}
 		this.terminals.push(newInfo)
 		return newInfo
