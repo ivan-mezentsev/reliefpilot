@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.2 - 2026-03-07
+
+- docs(execute_command, get_terminal_output): update model descriptions
+- feat(terminal): include terminal ID in terminal name during creation
+
 ## 0.9.1 - 2026-02-24
 
 - feat(terminal): improve new terminal initialization process
