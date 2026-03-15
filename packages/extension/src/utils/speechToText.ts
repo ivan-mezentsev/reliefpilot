@@ -159,7 +159,7 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
     if (!resp.ok) {
         const errText = await resp.text().catch(() => '')
         // Some endpoints don't support verbose_json — fall back to json and remember
-        if (format === 'verbose_json' && resp.status >= 400 && resp.status < 500 && errText.includes('response_format')) {
+        if (format === 'verbose_json' && errText.includes('response_format')) {
             verboseJsonSupported = false
             const fallbackResp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: 'json', signal })
             if (!fallbackResp.ok) {
