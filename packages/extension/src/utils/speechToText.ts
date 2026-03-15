@@ -150,6 +150,30 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
         throw new Error('Speech transcription endpoint is not configured. Set "reliefpilot.speechTranscriptionEndpoint" in settings.')
     }
 
+    // Try verbose_json first (segments + no_speech_prob), fall back to json on error
+    const resp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: 'verbose_json', signal })
+
+    if (!resp.ok) {
+        const errText = await resp.text().catch(() => '')
+        // Some endpoints don't support verbose_json — retry with plain json
+        if (resp.status >= 400 && resp.status < 500 && errText.includes('response_format')) {
+            const fallbackResp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: 'json', signal })
+            if (!fallbackResp.ok) {
+                const fallbackErr = await fallbackResp.text().catch(() => '')
+                throw new Error(`Speech transcription error ${fallbackResp.status}: ${fallbackErr}`)
+            }
+            return parseTranscriptionResponse(fallbackResp)
+        }
+        throw new Error(`Speech transcription error ${resp.status}: ${errText}`)
+    }
+
+    return parseTranscriptionResponse(resp)
+}
+
+async function sendTranscriptionRequest(
+    audioBuffer: Buffer,
+    opts: { apiKey: string; endpointBase: string; model: string; language: string; responseFormat: string; signal?: AbortSignal },
+): Promise<Response> {
     const boundary = '----ReliefPilotSpeech' + randomUUID()
     const parts: Buffer[] = []
 
@@ -159,15 +183,15 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
     parts.push(audioBuffer)
     parts.push(Buffer.from('\r\n'))
     parts.push(Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\n${model}\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\n${opts.model}\r\n`,
     ))
-    if (language) {
+    if (opts.language) {
         parts.push(Buffer.from(
-            `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${language}\r\n`,
+            `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${opts.language}\r\n`,
         ))
     }
     parts.push(Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\nverbose_json\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\n${opts.responseFormat}\r\n`,
     ))
     parts.push(Buffer.from(`--${boundary}--\r\n`))
 
@@ -175,28 +199,25 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
     const headers: Record<string, string> = {
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
     }
-    if (apiKey) {
-        headers.Authorization = `Bearer ${apiKey}`
+    if (opts.apiKey) {
+        headers.Authorization = `Bearer ${opts.apiKey}`
     }
 
     // Combine session abort signal with a per-request timeout
     const timeoutSignal = AbortSignal.timeout(30_000)
-    const fetchSignal = signal
-        ? AbortSignal.any([signal, timeoutSignal])
+    const fetchSignal = opts.signal
+        ? AbortSignal.any([opts.signal, timeoutSignal])
         : timeoutSignal
 
-    const resp = await fetch(`${endpointBase}/audio/transcriptions`, {
+    return fetch(`${opts.endpointBase}/audio/transcriptions`, {
         method: 'POST',
         headers,
         body,
         signal: fetchSignal,
     })
+}
 
-    if (!resp.ok) {
-        const errText = await resp.text().catch(() => '')
-        throw new Error(`Speech transcription error ${resp.status}: ${errText}`)
-    }
-
+async function parseTranscriptionResponse(resp: Response): Promise<string> {
     const contentType = resp.headers.get('content-type') ?? ''
     if (contentType.includes('application/json')) {
         const json = await resp.json() as {
