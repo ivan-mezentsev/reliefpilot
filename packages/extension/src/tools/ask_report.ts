@@ -10,6 +10,7 @@ import * as vscode from 'vscode'
 import { askReportHistory } from '../utils/ask_report_history'
 import { env } from '../utils/env'
 import { haltForFeedbackController } from '../utils/haltForFeedbackController'
+import { startStreamingRecording, type StreamingRecordingSession } from '../utils/speechToText'
 import { statusBarActivity } from '../utils/statusBar'
 
 // Types for ask_report tool API
@@ -53,6 +54,12 @@ export type AskReportInput = {
     predefinedOptions?: string[]
 }
 
+let activeAskReportPanel: vscode.WebviewPanel | undefined
+
+export function getActiveAskReportPanel(): vscode.WebviewPanel | undefined {
+    return activeAskReportPanel
+}
+
 // Create a webview panel for ask_report and return a placeholder Cancel result for now.
 export async function askReport(opts: AskReportOptions): Promise<AskUserResult> {
     const title = opts.title ?? 'Ask Report'
@@ -76,6 +83,8 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
             localResourceRoots: [mediaRoot],
         },
     )
+
+    activeAskReportPanel = panel
 
     // Bind this panel instance to history entry (if any) to avoid duplicates
     if (opts.historyId) {
@@ -110,6 +119,9 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
     )
     const hljsCssUri = panel.webview.asWebviewUri(
         vscode.Uri.joinPath(extensionUri, 'media', 'highlight.github.css'),
+    )
+    const voiceInputUri = panel.webview.asWebviewUri(
+        vscode.Uri.joinPath(extensionUri, 'media', 'voice-input.js'),
     )
 
     // Generate secure HTML with CSP, connect marked.min.js via asWebviewUri, and build UI containers.
@@ -161,7 +173,14 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         <footer class="askreport__footer askreport__dock" id="bottomDock">
             <div class="controls">
                 <fieldset id="optionsFieldset" class="options" aria-label="Ask report options"></fieldset>
-                <textarea id="customText" class="textarea" aria-label="Custom response" placeholder="Type your response…"></textarea>
+                <div class="textarea-mic-wrap" style="position:relative;">
+                  <textarea id="customText" class="textarea" aria-label="Custom response" placeholder="Type your response…"></textarea>
+                  <button id="micBtn" class="btn secondary" aria-label="Voice input" title="Voice input" style="position:absolute;bottom:6px;right:6px;width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;opacity:0.75;transition:opacity 0.15s;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-7 8h2a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.93V21h-4v-3.07A7 7 0 0 1 5 11z"/>
+                    </svg>
+                  </button>
+                </div>
             </div>
             <div class="actions">
                 <button id="submitBtn" class="btn primary" aria-label="Submit" disabled>Submit</button>
@@ -637,15 +656,20 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
             // (Markdown decoration helpers moved to shared media/markdown-enhance.js)
 
         </script>
+    <script nonce="${nonce}" src="${voiceInputUri}"></script>
+    <script nonce="${nonce}">initVoiceInput({ micBtn: document.getElementById('micBtn'), textarea: el.textarea, vscode: vscode });</script>
     </body>
 </html>`
 
     // Return a promise that resolves based on webview messages or panel disposal
     return await new Promise<AskUserResult>((resolve) => {
         let settled = false
+        let activeRecording: StreamingRecordingSession | undefined
+        let recordingSessionId = 0
         const finalize = (res: AskUserResult) => {
             if (!settled) {
                 settled = true
+                activeRecording?.cancel()
                 try { panel.dispose() } catch { /* noop */ }
                 resolve(res)
             }
@@ -701,6 +725,35 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                         }
                         return
                     }
+                    case 'startRecording': {
+                        activeRecording?.cancel()
+                        const myId = ++recordingSessionId
+                        const session = startStreamingRecording({
+                            onText: (text: string) => {
+                                if (recordingSessionId !== myId) return
+                                void panel.webview.postMessage({ type: 'speechResult', text })
+                            },
+                            onEnd: () => {
+                                if (recordingSessionId !== myId) return
+                                activeRecording = undefined
+                                void panel.webview.postMessage({ type: 'speechEnded' })
+                            },
+                            onError: (err: Error) => {
+                                if (recordingSessionId !== myId) return
+                                activeRecording = undefined
+                                void vscode.window.showErrorMessage(`Voice error: ${err?.message || 'unknown'}`)
+                                void panel.webview.postMessage({ type: 'speechError' })
+                            },
+                        })
+                        activeRecording = session
+                        return
+                    }
+                    case 'stopRecording': {
+                        const rec = activeRecording
+                        activeRecording = undefined
+                        rec?.stop()
+                        return
+                    }
                     default:
                         return
                 }
@@ -710,6 +763,8 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         // Resolve Cancel if panel is closed without decision
         disposables.push(
             panel.onDidDispose(() => {
+                activeRecording?.cancel()
+                if (activeAskReportPanel === panel) activeAskReportPanel = undefined
                 if (opts.historyId) {
                     try {
                         const entry = askReportHistory.getById(opts.historyId)
@@ -892,6 +947,6 @@ function serializeForHtmlScriptTag(value: unknown): string {
         .replace(/</g, '\\u003c')
         .replace(/>/g, '\\u003e')
         .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029')
 }
