@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -144,8 +145,11 @@ export function isHallucination(text: string): boolean {
  */
 export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
     const { apiKey, endpointBase, model, language } = await getSpeechConfig()
+    if (!endpointBase) {
+        throw new Error('Speech transcription endpoint is not configured. Set "reliefpilot.speechTranscriptionEndpoint" in settings.')
+    }
 
-    const boundary = '----ReliefPilotSpeech' + Date.now()
+    const boundary = '----ReliefPilotSpeech' + randomUUID()
     const parts: Buffer[] = []
 
     parts.push(Buffer.from(
@@ -175,6 +179,7 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
         method: 'POST',
         headers,
         body,
+        signal: AbortSignal.timeout(30_000),
     })
 
     if (!resp.ok) {
@@ -218,8 +223,8 @@ export function startStreamingRecording(opts: {
     }
 }): StreamingRecordingSession {
     const chunkSec = opts.chunkSeconds ?? 3
-    const tmpDir = os.tmpdir()
-    const prefix = `reliefpilot-stream-${Date.now()}`
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reliefpilot-stream-'))
+    const prefix = path.basename(tmpDir)
     let chunkIndex = 0
     let proc: ChildProcess | undefined
     let cancelled = false
@@ -329,6 +334,7 @@ export function startStreamingRecording(opts: {
         for (let i = 0; i <= chunkIndex; i++) {
             try { fs.unlinkSync(path.join(tmpDir, `${prefix}-${i}.wav`)) } catch { /* ignore */ }
         }
+        try { fs.rmdirSync(tmpDir) } catch { /* ignore — may not be empty */ }
     }
 
     // Resolve platform-specific device once before starting chunks

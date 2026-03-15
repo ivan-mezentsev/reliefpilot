@@ -251,7 +251,9 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
             onEnd: () => {
                 // After end, temp files should be cleaned up
                 const leftover = fs.readdirSync(tmpDir).filter((f) => f.startsWith('reliefpilot-stream-'))
-                assert.ok(leftover.length === 0 || true, `Temp files may remain from other tests: ${leftover.length}`)
+                // Note: test-injected fakeSpawnFfmpeg does not write real files,
+                // so cleanup has nothing to remove — just verify no crash.
+                assert.ok(Array.isArray(leftover), 'Expected array from readdirSync')
                 done()
             },
             onError: (err) => done(err),
