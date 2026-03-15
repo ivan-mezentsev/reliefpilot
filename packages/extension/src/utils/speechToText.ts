@@ -165,6 +165,9 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
             `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${language}\r\n`,
         ))
     }
+    parts.push(Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\nverbose_json\r\n`,
+    ))
     parts.push(Buffer.from(`--${boundary}--\r\n`))
 
     const body = Buffer.concat(parts)
@@ -189,7 +192,21 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 
     const contentType = resp.headers.get('content-type') ?? ''
     if (contentType.includes('application/json')) {
-        return (await resp.json() as { text?: string }).text ?? ''
+        const json = await resp.json() as {
+            text?: string
+            segments?: Array<{ text?: string; no_speech_prob?: number; avg_logprob?: number; compression_ratio?: number }>
+        }
+        // If verbose_json with segments is available, filter out hallucinated segments
+        if (json.segments && json.segments.length > 0) {
+            const NO_SPEECH_THRESHOLD = 0.6
+            const meaningful = json.segments
+                .filter((s) => (s.no_speech_prob ?? 0) < NO_SPEECH_THRESHOLD)
+                .map((s) => s.text ?? '')
+                .join('')
+                .trim()
+            return meaningful
+        }
+        return json.text ?? ''
     }
     return (await resp.text().catch(() => '')).trim()
 }
