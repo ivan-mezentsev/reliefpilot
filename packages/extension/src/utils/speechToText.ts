@@ -156,10 +156,22 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
 
     if (!resp.ok) {
         const errText = await resp.text().catch(() => '')
-        const hint = responseFormat === 'verbose_json'
-            ? ' Try setting "reliefpilot.speechResponseFormat" to "json" — the endpoint may not support verbose_json.'
-            : ''
-        throw new Error(`Speech transcription error ${resp.status}: ${errText}${hint}`)
+
+        // Auto-downgrade verbose_json → json when the endpoint rejects the format
+        if (responseFormat === 'verbose_json' && errText.includes('response_format')) {
+            const config = vscode.workspace.getConfiguration()
+            await config.update('reliefpilot.speechResponseFormat', 'json', vscode.ConfigurationTarget.Global)
+            vscode.window.showInformationMessage('Endpoint does not support verbose_json — switched to json format automatically.')
+
+            const retryResp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: 'json', signal })
+            if (!retryResp.ok) {
+                const retryErr = await retryResp.text().catch(() => '')
+                throw new Error(`Speech transcription error ${retryResp.status}: ${retryErr}`)
+            }
+            return parseTranscriptionResponse(retryResp)
+        }
+
+        throw new Error(`Speech transcription error ${resp.status}: ${errText}`)
     }
 
     return parseTranscriptionResponse(resp)
