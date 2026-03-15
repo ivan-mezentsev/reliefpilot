@@ -140,6 +140,9 @@ export function isHallucination(text: string): boolean {
 
 // ── Transcription ────────────────────────────────────────────────────
 
+// Cache: once verbose_json fails for an endpoint, don't retry it
+let verboseJsonSupported: boolean | undefined
+
 /**
  * Transcribe audio buffer via the configured speech-to-text endpoint.
  * Accepts an optional AbortSignal for session-level cancellation.
@@ -150,13 +153,14 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
         throw new Error('Speech transcription endpoint is not configured. Set "reliefpilot.speechTranscriptionEndpoint" in settings.')
     }
 
-    // Try verbose_json first (segments + no_speech_prob), fall back to json on error
-    const resp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: 'verbose_json', signal })
+    const format = verboseJsonSupported !== false ? 'verbose_json' : 'json'
+    const resp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: format, signal })
 
     if (!resp.ok) {
         const errText = await resp.text().catch(() => '')
-        // Some endpoints don't support verbose_json — retry with plain json
-        if (resp.status >= 400 && resp.status < 500 && errText.includes('response_format')) {
+        // Some endpoints don't support verbose_json — fall back to json and remember
+        if (format === 'verbose_json' && resp.status >= 400 && resp.status < 500 && errText.includes('response_format')) {
+            verboseJsonSupported = false
             const fallbackResp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: 'json', signal })
             if (!fallbackResp.ok) {
                 const fallbackErr = await fallbackResp.text().catch(() => '')
@@ -167,6 +171,9 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
         throw new Error(`Speech transcription error ${resp.status}: ${errText}`)
     }
 
+    if (format === 'verbose_json' && verboseJsonSupported === undefined) {
+        verboseJsonSupported = true
+    }
     return parseTranscriptionResponse(resp)
 }
 
