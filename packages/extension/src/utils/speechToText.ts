@@ -15,6 +15,7 @@ interface SpeechConfig {
     endpointBase: string
     model: string
     language: string
+    responseFormat: string
 }
 
 export interface StreamingRecordingSession {
@@ -53,7 +54,8 @@ async function getSpeechConfig(): Promise<SpeechConfig> {
     const endpointBase = (config.get<string>('speechTranscriptionEndpoint', '') ?? '').trim().replace(/\/+$/, '')
     const model = (config.get<string>('speechModel', '') ?? '').trim()
     const language = config.get<string>('speechLanguage', '') ?? ''
-    return { apiKey, endpointBase, model, language }
+    const responseFormat = (config.get<string>('speechResponseFormat', 'json') ?? 'json').trim() || 'json'
+    return { apiKey, endpointBase, model, language, responseFormat }
 }
 
 // ── FFmpeg ────────────────────────────────────────────────────────────
@@ -140,40 +142,23 @@ export function isHallucination(text: string): boolean {
 
 // ── Transcription ────────────────────────────────────────────────────
 
-// Cache: once verbose_json fails for an endpoint, don't retry it
-let verboseJsonSupported: boolean | undefined
-
 /**
  * Transcribe audio buffer via the configured speech-to-text endpoint.
  * Accepts an optional AbortSignal for session-level cancellation.
  */
 export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal): Promise<string> {
-    const { apiKey, endpointBase, model, language } = await getSpeechConfig()
+    const { apiKey, endpointBase, model, language, responseFormat } = await getSpeechConfig()
     if (!endpointBase) {
         throw new Error('Speech transcription endpoint is not configured. Set "reliefpilot.speechTranscriptionEndpoint" in settings.')
     }
 
-    const format = verboseJsonSupported !== false ? 'verbose_json' : 'json'
-    const resp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: format, signal })
+    const resp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat, signal })
 
     if (!resp.ok) {
         const errText = await resp.text().catch(() => '')
-        // Some endpoints don't support verbose_json — fall back to json and remember
-        if (format === 'verbose_json' && errText.includes('response_format')) {
-            verboseJsonSupported = false
-            const fallbackResp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: 'json', signal })
-            if (!fallbackResp.ok) {
-                const fallbackErr = await fallbackResp.text().catch(() => '')
-                throw new Error(`Speech transcription error ${fallbackResp.status}: ${fallbackErr}`)
-            }
-            return parseTranscriptionResponse(fallbackResp)
-        }
         throw new Error(`Speech transcription error ${resp.status}: ${errText}`)
     }
 
-    if (format === 'verbose_json' && verboseJsonSupported === undefined) {
-        verboseJsonSupported = true
-    }
     return parseTranscriptionResponse(resp)
 }
 

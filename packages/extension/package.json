@@ -225,6 +225,15 @@
           "default": "whisper-large-v3-turbo",
           "description": "Speech-to-text model name sent to the transcription endpoint (for example whisper-large-v3-turbo, whisper-1, or your local model id)."
         },
+        "reliefpilot.speechResponseFormat": {
+          "type": "string",
+          "default": "json",
+          "enum": [
+            "json",
+            "verbose_json"
+          ],
+          "markdownDescription": "Response format for speech transcription. `json` works with all endpoints. `verbose_json` enables segment-level hallucination filtering via `no_speech_prob` (supported by OpenAI, Groq, whisper.cpp)."
+        },
         "reliefpilot.speechLinuxInputBackend": {
           "type": "string",
           "default": "auto",
