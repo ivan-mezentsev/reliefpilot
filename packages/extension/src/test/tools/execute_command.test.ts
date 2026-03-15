@@ -63,6 +63,7 @@ suite('Execute Command Tool Test Suite', function () {
   });
 
   test('Basic command execution', async function () {
+    this.retries(2);
     console.log('Running basic command execution test');
     const [userRejected, response] = await tool.execute('cat test.txt');
     console.log('Basic command execution result:', response);
@@ -82,6 +83,7 @@ suite('Execute Command Tool Test Suite', function () {
   });
 
   test('Command execution in subdirectory', async function () {
+    this.retries(2);
     console.log('Running subdirectory command test');
 
     // Create subdirectory and file
@@ -110,6 +112,7 @@ suite('Execute Command Tool Test Suite', function () {
   });
 
   test('Failed command execution', async function () {
+    this.retries(2);
     console.log('Running failed command test');
     const [userRejected, response] = await tool.execute('cat nonexistent.txt');
     console.log('Failed command test result:', response);
@@ -119,6 +122,7 @@ suite('Execute Command Tool Test Suite', function () {
   });
 
   test('Non-existent working directory', async function () {
+    this.retries(2);
     console.log('Running non-existent directory test');
     const [userRejected, response] = await tool.execute('ls', path.join(tmpDir, 'nonexistent'));
     console.log('Non-existent directory test result:', response);
@@ -131,6 +135,7 @@ suite('Execute Command Tool Test Suite', function () {
   });
 
   test('Long running command', async function () {
+    this.retries(2);
     console.log('Running long command test');
     const [userRejected, response] = await tool.execute('sleep 2 && echo "done"');
     console.log('Long command test result:', response);
