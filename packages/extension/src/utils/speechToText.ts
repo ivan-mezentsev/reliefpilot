@@ -156,7 +156,10 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
 
     if (!resp.ok) {
         const errText = await resp.text().catch(() => '')
-        throw new Error(`Speech transcription error ${resp.status}: ${errText}`)
+        const hint = responseFormat === 'verbose_json'
+            ? ' Try setting "reliefpilot.speechResponseFormat" to "json" — the endpoint may not support verbose_json.'
+            : ''
+        throw new Error(`Speech transcription error ${resp.status}: ${errText}${hint}`)
     }
 
     return parseTranscriptionResponse(resp)
