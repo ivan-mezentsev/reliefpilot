@@ -136,7 +136,7 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
 
     let transcribeCallCount: number
 
-    function fakeTranscribe(_buf: Buffer): Promise<string> {
+    function fakeTranscribe(_buf: Buffer, _signal?: AbortSignal): Promise<string> {
         transcribeCallCount++
         return Promise.resolve(`chunk-${transcribeCallCount}`)
     }
@@ -217,7 +217,7 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
         let callIdx = 0
 
         // Simulate variable network delays: first call slow, second fast
-        function delayedTranscribe(_buf: Buffer): Promise<string> {
+        function delayedTranscribe(_buf: Buffer, _signal?: AbortSignal): Promise<string> {
             const myIdx = callIdx++
             const delay = myIdx === 0 ? 150 : 10
             return new Promise((resolve) =>
@@ -228,6 +228,8 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
         const session = startStreamingRecording({
             onText: (t) => texts.push(t),
             onEnd: () => {
+                // Must have at least one chunk for the ordering check to be meaningful
+                assert.ok(texts.length > 0, 'Expected at least one ordered chunk')
                 // Verify ordering: first text should be ordered-0, second ordered-1, etc.
                 for (let i = 0; i < texts.length; i++) {
                     assert.strictEqual(texts[i], `ordered-${i}`, `Text at index ${i} should be ordered-${i}, got ${texts[i]}`)

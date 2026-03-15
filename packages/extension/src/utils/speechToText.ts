@@ -142,8 +142,9 @@ export function isHallucination(text: string): boolean {
 
 /**
  * Transcribe audio buffer via the configured speech-to-text endpoint.
+ * Accepts an optional AbortSignal for session-level cancellation.
  */
-export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
+export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal): Promise<string> {
     const { apiKey, endpointBase, model, language } = await getSpeechConfig()
     if (!endpointBase) {
         throw new Error('Speech transcription endpoint is not configured. Set "reliefpilot.speechTranscriptionEndpoint" in settings.')
@@ -178,11 +179,17 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
         headers.Authorization = `Bearer ${apiKey}`
     }
 
+    // Combine session abort signal with a per-request timeout
+    const timeoutSignal = AbortSignal.timeout(30_000)
+    const fetchSignal = signal
+        ? AbortSignal.any([signal, timeoutSignal])
+        : timeoutSignal
+
     const resp = await fetch(`${endpointBase}/audio/transcriptions`, {
         method: 'POST',
         headers,
         body,
-        signal: AbortSignal.timeout(30_000),
+        signal: fetchSignal,
     })
 
     if (!resp.ok) {
@@ -212,9 +219,14 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 }
 
 /** Transcribe a buffer and emit the result only if meaningful. */
-async function transcribeAndEmit(buf: Buffer, onText: (text: string) => void, transcriber?: (buf: Buffer) => Promise<string>): Promise<void> {
+async function transcribeAndEmit(
+    buf: Buffer,
+    onText: (text: string) => void,
+    transcriber?: (buf: Buffer, signal?: AbortSignal) => Promise<string>,
+    signal?: AbortSignal,
+): Promise<void> {
     if (buf.length < 1000) return
-    const text = (await (transcriber ?? transcribeAudio)(buf)).trim()
+    const text = (await (transcriber ?? transcribeAudio)(buf, signal)).trim()
     if (text && !isHallucination(text)) {
         onText(text)
     }
@@ -236,7 +248,7 @@ export function startStreamingRecording(opts: {
     /** @internal test-only overrides */
     _test?: {
         spawnFfmpeg?: (args: string[]) => { proc: ChildProcess; getStderr: () => string }
-        transcribeAudio?: (buf: Buffer) => Promise<string>
+        transcribeAudio?: (buf: Buffer, signal?: AbortSignal) => Promise<string>
     }
 }): StreamingRecordingSession {
     const chunkSec = opts.chunkSeconds ?? 3
@@ -251,6 +263,12 @@ export function startStreamingRecording(opts: {
     let chunkCloseResolver: (() => void) | undefined
     let resolvedWindowsDevice: string | undefined
     let resolvedMacDevice: string | undefined
+
+    // Session-level abort controller — aborts all in-flight fetch requests
+    const abortController = new AbortController()
+
+    // Track in-flight transcription promises so stop() can drain them
+    const inFlight = new Set<Promise<void>>()
 
     // ── Ordered emission queue ───────────────────────────────────
     // Each chunk gets a sequential index. Transcription results are
@@ -302,7 +320,7 @@ export function startStreamingRecording(opts: {
 
             const capturedFile = file
             const capturedIdx = chunkIndex
-            void (async () => {
+            const task = (async () => {
                 try {
                     const ready = await waitForFileReady(capturedFile, 1500)
                     if (!ready) {
@@ -318,19 +336,21 @@ export function startStreamingRecording(opts: {
                     }
                     const buf = fs.readFileSync(capturedFile)
                     fs.unlinkSync(capturedFile)
-                    await transcribeAndEmit(buf, (text) => enqueueEmit(capturedIdx, text), opts._test?.transcribeAudio)
+                    await transcribeAndEmit(buf, (text) => enqueueEmit(capturedIdx, text), opts._test?.transcribeAudio, abortController.signal)
                     // If transcription produced no text, still mark slot as done
                     if (!pendingEmits.has(capturedIdx) && capturedIdx >= nextEmitIndex) {
                         enqueueEmit(capturedIdx, null)
                     }
                 } catch (err) {
-                    if (!stopping) {
+                    if (!stopping && !cancelled) {
                         cleanup()
                         opts.onError(err as Error)
                         return
                     }
                 }
             })()
+            inFlight.add(task)
+            void task.finally(() => inFlight.delete(task))
 
             chunkIndex++
             if (!cancelled && !stopping) startChunk()
@@ -347,6 +367,7 @@ export function startStreamingRecording(opts: {
     function cleanup() {
         cancelled = true
         stopping = false
+        abortController.abort()
         try { proc?.kill('SIGKILL') } catch { /* ignore */ }
         for (let i = 0; i <= chunkIndex; i++) {
             try { fs.unlinkSync(path.join(tmpDir, `${prefix}-${i}.wav`)) } catch { /* ignore */ }
@@ -405,6 +426,8 @@ export function startStreamingRecording(opts: {
 
             void (async () => {
                 await waitForClose
+
+                // Transcribe the final (in-progress) chunk
                 try {
                     const file = chunkFile()
                     const ready = await waitForFileReady(file, 2000)
@@ -412,12 +435,16 @@ export function startStreamingRecording(opts: {
                         const buf = fs.readFileSync(file)
                         fs.unlinkSync(file)
                         const lastIdx = chunkIndex
-                        await transcribeAndEmit(buf, (text) => enqueueEmit(lastIdx, text), opts._test?.transcribeAudio)
+                        await transcribeAndEmit(buf, (text) => enqueueEmit(lastIdx, text), opts._test?.transcribeAudio, abortController.signal)
                         if (!pendingEmits.has(lastIdx) && lastIdx >= nextEmitIndex) {
                             enqueueEmit(lastIdx, null)
                         }
                     }
                 } catch { /* ignore last-chunk errors */ }
+
+                // Drain all in-flight transcription promises before signaling end
+                await Promise.allSettled([...inFlight])
+
                 cancelled = true
                 stopping = false
                 opts.onEnd()
