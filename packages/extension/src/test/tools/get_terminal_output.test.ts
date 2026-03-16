@@ -67,7 +67,6 @@ suite('Get Terminal Output Tool Test Suite', function () {
   });
 
   test('Get output from a terminal', async function () {
-    this.retries(2);
     // Ensure we have a terminal ID from the setup test
     assert.ok(testTerminalId, 'Terminal ID should be set from previous test');
 
@@ -111,7 +110,6 @@ suite('Get Terminal Output Tool Test Suite', function () {
   });
 
   test('Get output after background command', async function () {
-    this.retries(2);
     // Run a command in background mode
     const [userRejected, cmdResponse] = await execTool.execute('echo "Background command test" && sleep 1 && echo "After delay"', undefined, false, true);
 

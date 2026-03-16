@@ -462,9 +462,11 @@ export function startStreamingRecording(opts: {
                 await waitForClose
 
                 // Drain all in-flight transcription promises before signaling end.
-                // The close handler registers its task in inFlight BEFORE resolving
-                // chunkCloseResolver, so the final chunk is guaranteed to be included.
-                await Promise.allSettled([...inFlight])
+                // Loop until the set is truly empty — a late close handler may
+                // register one more task after the initial snapshot.
+                while (inFlight.size > 0) {
+                    await Promise.allSettled([...inFlight])
+                }
 
                 cancelled = true
                 stopping = false

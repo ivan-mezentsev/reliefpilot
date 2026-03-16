@@ -107,7 +107,13 @@ function createFakeSpawn(delayMs = 20) {
         const em = new EventEmitter()
         const fakeProc = em as unknown as ChildProcess
             ; (fakeProc as unknown as Record<string, unknown>).pid = 99999
+
+        // Natural close timer — cancelled if kill() is called first
+        const naturalTimer = setTimeout(() => em.emit('close', 0, null), delayMs)
+
         fakeProc.kill = () => {
+            // Cancel natural timer to prevent double-close
+            clearTimeout(naturalTimer)
             // Simulate SIGINT — emit close soon
             setTimeout(() => em.emit('close', 0, null), delayMs / 2)
             return true
@@ -121,9 +127,6 @@ function createFakeSpawn(delayMs = 20) {
             // Write >1000 bytes so transcribeAndEmit doesn't skip
             fs.writeFileSync(outputFile, Buffer.alloc(2000, 0x42))
         }
-
-        // Emit 'close' after delay to simulate chunk recording complete
-        setTimeout(() => em.emit('close', 0, null), delayMs)
 
         return { proc: fakeProc, getStderr: () => '' }
     }
@@ -177,10 +180,12 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
         const session = startStreamingRecording({
             onText: (t) => texts.push(t),
             onEnd: () => {
-                endCalled = true
-                // onEnd means recording lifecycle completed
-                assert.strictEqual(endCalled, true)
-                done()
+                try {
+                    endCalled = true
+                    // onEnd means recording lifecycle completed
+                    assert.strictEqual(endCalled, true)
+                    done()
+                } catch (err) { done(err) }
             },
             onError: (err) => done(err),
             chunkSeconds: 1,
@@ -198,9 +203,11 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
         const session = startStreamingRecording({
             onText: (t) => texts.push(t),
             onEnd: () => {
-                assert.ok(texts.length > 0, 'Expected at least one transcribed text')
-                assert.ok(texts.some((t) => t.startsWith('chunk-')), 'Expected fake transcription output')
-                done()
+                try {
+                    assert.ok(texts.length > 0, 'Expected at least one transcribed text')
+                    assert.ok(texts.some((t) => t.startsWith('chunk-')), 'Expected fake transcription output')
+                    done()
+                } catch (err) { done(err) }
             },
             onError: (err) => done(err),
             chunkSeconds: 1,
@@ -228,13 +235,15 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
         const session = startStreamingRecording({
             onText: (t) => texts.push(t),
             onEnd: () => {
-                // Must have at least one chunk for the ordering check to be meaningful
-                assert.ok(texts.length > 0, 'Expected at least one ordered chunk')
-                // Verify ordering: first text should be ordered-0, second ordered-1, etc.
-                for (let i = 0; i < texts.length; i++) {
-                    assert.strictEqual(texts[i], `ordered-${i}`, `Text at index ${i} should be ordered-${i}, got ${texts[i]}`)
-                }
-                done()
+                try {
+                    // Must have at least one chunk for the ordering check to be meaningful
+                    assert.ok(texts.length > 0, 'Expected at least one ordered chunk')
+                    // Verify ordering: first text should be ordered-0, second ordered-1, etc.
+                    for (let i = 0; i < texts.length; i++) {
+                        assert.strictEqual(texts[i], `ordered-${i}`, `Text at index ${i} should be ordered-${i}, got ${texts[i]}`)
+                    }
+                    done()
+                } catch (err) { done(err) }
             },
             onError: (err) => done(err),
             chunkSeconds: 1,
@@ -251,12 +260,14 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
         const session = startStreamingRecording({
             onText: () => { },
             onEnd: () => {
-                // After end, temp files should be cleaned up
-                const leftover = fs.readdirSync(tmpDir).filter((f) => f.startsWith('reliefpilot-stream-'))
-                // Note: test-injected fakeSpawnFfmpeg does not write real files,
-                // so cleanup has nothing to remove — just verify no crash.
-                assert.ok(Array.isArray(leftover), 'Expected array from readdirSync')
-                done()
+                try {
+                    // After end, temp files should be cleaned up
+                    const leftover = fs.readdirSync(tmpDir).filter((f) => f.startsWith('reliefpilot-stream-'))
+                    // Note: test-injected fakeSpawnFfmpeg does not write real files,
+                    // so cleanup has nothing to remove — just verify no crash.
+                    assert.ok(Array.isArray(leftover), 'Expected array from readdirSync')
+                    done()
+                } catch (err) { done(err) }
             },
             onError: (err) => done(err),
             chunkSeconds: 1,
