@@ -342,9 +342,11 @@ export function startStreamingRecording(opts: {
         stderrGetter = started.getStderr
 
         proc.on('close', () => {
-            chunkCloseResolver?.()
-            chunkCloseResolver = undefined
-            if (cancelled) return
+            if (cancelled) {
+                chunkCloseResolver?.()
+                chunkCloseResolver = undefined
+                return
+            }
 
             const capturedFile = file
             const capturedIdx = chunkIndex
@@ -379,6 +381,10 @@ export function startStreamingRecording(opts: {
             })()
             inFlight.add(task)
             void task.finally(() => inFlight.delete(task))
+
+            // Resolve AFTER the task is registered in inFlight so stop() drain sees it
+            chunkCloseResolver?.()
+            chunkCloseResolver = undefined
 
             chunkIndex++
             if (!cancelled && !stopping) startChunk()
@@ -455,22 +461,9 @@ export function startStreamingRecording(opts: {
             void (async () => {
                 await waitForClose
 
-                // Transcribe the final (in-progress) chunk
-                try {
-                    const file = chunkFile()
-                    const ready = await waitForFileReady(file, 2000)
-                    if (ready && fs.existsSync(file)) {
-                        const buf = fs.readFileSync(file)
-                        fs.unlinkSync(file)
-                        const lastIdx = chunkIndex
-                        await transcribeAndEmit(buf, (text) => enqueueEmit(lastIdx, text), opts._test?.transcribeAudio, abortController.signal)
-                        if (!pendingEmits.has(lastIdx) && lastIdx >= nextEmitIndex) {
-                            enqueueEmit(lastIdx, null)
-                        }
-                    }
-                } catch { /* ignore last-chunk errors */ }
-
-                // Drain all in-flight transcription promises before signaling end
+                // Drain all in-flight transcription promises before signaling end.
+                // The close handler registers its task in inFlight BEFORE resolving
+                // chunkCloseResolver, so the final chunk is guaranteed to be included.
                 await Promise.allSettled([...inFlight])
 
                 cancelled = true
