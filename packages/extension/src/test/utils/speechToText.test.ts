@@ -292,4 +292,51 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
 
         setTimeout(() => session.stop(), 100)
     })
+
+    test('prompts to install FFmpeg and retries once when ffmpeg is missing', function (done) {
+        const { fakeSpawnFfmpeg } = createFakeSpawn(20)
+        let spawnCount = 0
+        let promptCount = 0
+        let stopRequested = false
+
+        function missingThenWorkingSpawn(args: string[]): { proc: ChildProcess; getStderr: () => string } {
+            spawnCount++
+            if (spawnCount === 1) {
+                const em = new EventEmitter()
+                const fakeProc = em as unknown as ChildProcess
+                ; (fakeProc as unknown as Record<string, unknown>).pid = 99998
+                fakeProc.kill = () => true
+                setTimeout(() => em.emit('error', Object.assign(new Error('spawn ffmpeg ENOENT'), { code: 'ENOENT' })), 0)
+                return { proc: fakeProc, getStderr: () => '' }
+            }
+
+            return fakeSpawnFfmpeg(args)
+        }
+
+        const session = startStreamingRecording({
+            onText: () => {
+                if (!stopRequested) {
+                    stopRequested = true
+                    session.stop()
+                }
+            },
+            onEnd: () => {
+                try {
+                    assert.strictEqual(promptCount, 1, 'Expected exactly one FFmpeg install prompt')
+                    assert.ok(spawnCount >= 2, 'Expected FFmpeg spawn to be retried after prompt')
+                    done()
+                } catch (err) { done(err) }
+            },
+            onError: (err) => done(err),
+            chunkSeconds: 1,
+            _test: {
+                spawnFfmpeg: missingThenWorkingSpawn,
+                transcribeAudio: fakeTranscribe,
+                promptToInstallFfmpeg: async () => {
+                    promptCount++
+                    return true
+                },
+            },
+        })
+    })
 })

@@ -58,6 +58,33 @@ async function getSpeechConfig(): Promise<SpeechConfig> {
     return { apiKey, endpointBase, model, language, responseFormat }
 }
 
+const FFMPEG_INSTALL_URL = 'https://ffmpeg.org/download.html'
+
+async function promptToInstallFfmpeg(): Promise<boolean> {
+    const message = 'FFmpeg is not found on your system. Please install it and press OK to retry. Installation guide: ' + FFMPEG_INSTALL_URL
+    while (true) {
+        const selection = await vscode.window.showInformationMessage(
+            message,
+            { modal: true, detail: 'FFmpeg is required for microphone capture in Relief Pilot voice input.' },
+            'Open installation guide',
+            'OK',
+        )
+
+        if (selection === 'Open installation guide') {
+            await vscode.env.openExternal(vscode.Uri.parse(FFMPEG_INSTALL_URL))
+            continue
+        }
+        if (selection === 'OK') return true
+        return false
+    }
+}
+
+function isFfmpegMissingError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false
+    const code = (err as Error & { code?: unknown }).code
+    return code === 'ENOENT' || /ENOENT/i.test(err.message) || /spawn\s+ffmpeg\s+ENOENT/i.test(err.message)
+}
+
 // ── FFmpeg ────────────────────────────────────────────────────────────
 
 export function buildFfmpegArgs(opts: { outputFile: string; chunkSeconds?: number; linuxBackend?: LinuxInputBackend; windowsDevice?: string; macDevice?: string }): string[] {
@@ -277,6 +304,7 @@ export function startStreamingRecording(opts: {
     _test?: {
         spawnFfmpeg?: (args: string[]) => { proc: ChildProcess; getStderr: () => string }
         transcribeAudio?: (buf: Buffer, signal?: AbortSignal) => Promise<string>
+        promptToInstallFfmpeg?: () => Promise<boolean>
     }
 }): StreamingRecordingSession {
     const chunkSec = opts.chunkSeconds ?? 3
@@ -291,6 +319,8 @@ export function startStreamingRecording(opts: {
     let chunkCloseResolver: (() => void) | undefined
     let resolvedWindowsDevice: string | undefined
     let resolvedMacDevice: string | undefined
+    let ffmpegInstallRetried = false
+    let ffmpegInstallPromptInProgress = false
 
     // Session-level abort controller — aborts all in-flight fetch requests
     const abortController = new AbortController()
@@ -327,6 +357,50 @@ export function startStreamingRecording(opts: {
         return backends.length > 1 && linuxBackendIdx + 1 < backends.length
     }
 
+    function failRecording(err: Error) {
+        cleanup()
+        opts.onError(err)
+    }
+
+    function handleFfmpegSpawnError(err: Error) {
+        if (cancelled) return
+
+        if (!isFfmpegMissingError(err)) {
+            failRecording(err)
+            return
+        }
+
+        if (ffmpegInstallPromptInProgress) {
+            return
+        }
+
+        if (ffmpegInstallRetried) {
+            failRecording(new Error('FFmpeg is still not found after retry.'))
+            return
+        }
+
+        ffmpegInstallPromptInProgress = true
+        void (async () => {
+            try {
+                const retry = await (opts._test?.promptToInstallFfmpeg ?? promptToInstallFfmpeg)()
+                ffmpegInstallPromptInProgress = false
+
+                if (cancelled || stopping) return
+
+                if (retry) {
+                    ffmpegInstallRetried = true
+                    startChunk()
+                    return
+                }
+
+                failRecording(new Error('FFmpeg is not installed. User cancelled.'))
+            } catch (promptErr) {
+                ffmpegInstallPromptInProgress = false
+                failRecording(promptErr instanceof Error ? promptErr : new Error(String(promptErr)))
+            }
+        })()
+    }
+
     function startChunk() {
         if (cancelled || stopping) return
 
@@ -340,8 +414,15 @@ export function startStreamingRecording(opts: {
         const started = (opts._test?.spawnFfmpeg ?? spawnFfmpeg)(ffmpegArgs)
         proc = started.proc
         stderrGetter = started.getStderr
+        let skipCloseHandling = false
 
         proc.on('close', () => {
+            if (skipCloseHandling) {
+                chunkCloseResolver?.()
+                chunkCloseResolver = undefined
+                return
+            }
+
             if (cancelled) {
                 chunkCloseResolver?.()
                 chunkCloseResolver = undefined
@@ -391,10 +472,8 @@ export function startStreamingRecording(opts: {
         })
 
         proc.on('error', (err) => {
-            if (!cancelled) {
-                cleanup()
-                opts.onError(err)
-            }
+            skipCloseHandling = true
+            handleFfmpegSpawnError(err)
         })
     }
 
