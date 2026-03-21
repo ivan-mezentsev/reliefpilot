@@ -18,6 +18,11 @@ interface SpeechConfig {
     responseFormat: string
 }
 
+interface WindowsAudioDeviceDiscoveryResult {
+    devices: string[]
+    ffmpegMissing: boolean
+}
+
 export interface StreamingRecordingSession {
     stop(): void
     cancel(): void
@@ -304,9 +309,12 @@ export function startStreamingRecording(opts: {
         spawnFfmpeg?: (args: string[]) => { proc: ChildProcess; getStderr: () => string }
         transcribeAudio?: (buf: Buffer, signal?: AbortSignal) => Promise<string>
         promptToInstallFfmpeg?: () => Promise<boolean>
+        discoverWindowsAudioDevices?: () => Promise<WindowsAudioDeviceDiscoveryResult>
+        platform?: NodeJS.Platform
     }
 }): StreamingRecordingSession {
     const chunkSec = opts.chunkSeconds ?? 3
+    const runtimePlatform = opts._test?.platform ?? process.platform
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reliefpilot-stream-'))
     const prefix = path.basename(tmpDir)
     let proc: ChildProcess | undefined
@@ -354,7 +362,7 @@ export function startStreamingRecording(opts: {
     const outputPattern = path.join(tmpDir, `${prefix}-%06d.wav`)
 
     function canFallbackLinuxBackend(): boolean {
-        if (process.platform !== 'linux' || stopping) return false
+        if (runtimePlatform !== 'linux' || stopping) return false
         const backends = getLinuxBackends()
         return backends.length > 1 && linuxBackendIdx + 1 < backends.length
     }
@@ -364,14 +372,7 @@ export function startStreamingRecording(opts: {
         opts.onError(err)
     }
 
-    function handleFfmpegSpawnError(err: Error) {
-        if (cancelled) return
-
-        if (!isFfmpegMissingError(err)) {
-            failRecording(err)
-            return
-        }
-
+    function retryAfterFfmpegInstall(onRetry: () => void | Promise<void>) {
         if (ffmpegInstallPromptInProgress) {
             return
         }
@@ -391,7 +392,7 @@ export function startStreamingRecording(opts: {
 
                 if (retry) {
                     ffmpegInstallRetried = true
-                    startContinuousRecording()
+                    await onRetry()
                     return
                 }
 
@@ -401,6 +402,17 @@ export function startStreamingRecording(opts: {
                 failRecording(promptErr instanceof Error ? promptErr : new Error(String(promptErr)))
             }
         })()
+    }
+
+    function handleFfmpegSpawnError(err: Error) {
+        if (cancelled) return
+
+        if (!isFfmpegMissingError(err)) {
+            failRecording(err)
+            return
+        }
+
+        retryAfterFfmpegInstall(() => startContinuousRecording())
     }
 
     function queueChunkProcessing(filePath: string, chunkIndex: number) {
@@ -460,7 +472,7 @@ export function startStreamingRecording(opts: {
         if (cancelled || stopping) return
 
         const backends = getLinuxBackends()
-        const linuxBackend = process.platform === 'linux'
+        const linuxBackend = runtimePlatform === 'linux'
             ? (backends[linuxBackendIdx] ?? backends[0] ?? 'pulse')
             : undefined
 
@@ -546,13 +558,34 @@ export function startStreamingRecording(opts: {
             }
         }
 
-        if (process.platform === 'win32') {
+        if (runtimePlatform === 'win32') {
             const configured = getWindowsDevice()
             if (configured) {
                 resolvedWindowsDevice = configured
             } else {
-                const devices = await discoverWindowsAudioDevices()
-                resolvedWindowsDevice = devices[0]
+                const discovery = await (opts._test?.discoverWindowsAudioDevices ?? discoverWindowsAudioDevicesDetailed)()
+                if (discovery.ffmpegMissing) {
+                    retryAfterFfmpegInstall(async () => {
+                        const retryDiscovery = await (opts._test?.discoverWindowsAudioDevices ?? discoverWindowsAudioDevicesDetailed)()
+                        if (retryDiscovery.ffmpegMissing) {
+                            failRecording(new Error('FFmpeg is still not found after retry.'))
+                            return
+                        }
+
+                        resolvedWindowsDevice = retryDiscovery.devices[0]
+                        if (!resolvedWindowsDevice) {
+                            opts.onError(new Error(
+                                'No DirectShow audio input device found. Install a microphone driver or set "reliefpilot.speechWindowsDevice" in settings.',
+                            ))
+                            return
+                        }
+
+                        startContinuousRecording()
+                    })
+                    return
+                }
+
+                resolvedWindowsDevice = discovery.devices[0]
                 if (!resolvedWindowsDevice) {
                     opts.onError(new Error(
                         'No DirectShow audio input device found. Install a microphone driver or set "reliefpilot.speechWindowsDevice" in settings.',
@@ -560,7 +593,7 @@ export function startStreamingRecording(opts: {
                     return
                 }
             }
-        } else if (process.platform === 'darwin') {
+        } else if (runtimePlatform === 'darwin') {
             const configured = getMacDevice()
             if (configured) {
                 resolvedMacDevice = configured
@@ -618,8 +651,10 @@ export function startStreamingRecording(opts: {
  * Returns a list of device names (e.g. ["Microphone (Realtek High Definition Audio)"]).
  * Falls back to empty array on error.
  */
-export async function discoverWindowsAudioDevices(): Promise<string[]> {
-    if (process.platform !== 'win32') return []
+async function discoverWindowsAudioDevicesDetailed(): Promise<WindowsAudioDeviceDiscoveryResult> {
+    if (process.platform !== 'win32') {
+        return { devices: [], ffmpegMissing: false }
+    }
     return new Promise((resolve) => {
         const proc = spawn('ffmpeg', ['-list_devices', 'true', '-f', 'dshow', '-i', 'dummy'], {
             stdio: ['ignore', 'ignore', 'pipe'],
@@ -639,10 +674,15 @@ export async function discoverWindowsAudioDevices(): Promise<string[]> {
                     if (m && !/Alternative name/i.test(line)) devices.push(m[1])
                 }
             }
-            resolve(devices)
+            resolve({ devices, ffmpegMissing: false })
         })
-        proc.on('error', () => resolve([]))
+        proc.on('error', (err) => resolve({ devices: [], ffmpegMissing: isFfmpegMissingError(err) }))
     })
+}
+
+export async function discoverWindowsAudioDevices(): Promise<string[]> {
+    const result = await discoverWindowsAudioDevicesDetailed()
+    return result.devices
 }
 
 /**

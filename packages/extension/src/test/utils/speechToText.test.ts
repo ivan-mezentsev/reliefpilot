@@ -347,4 +347,45 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
             },
         })
     })
+
+    test('prompts to install FFmpeg when Windows device discovery fails with ENOENT and then retries recording', function (done) {
+        const { fakeSpawnFfmpeg } = createFakeSpawn(20)
+        let promptCount = 0
+        let discoveryCount = 0
+        let stopRequested = false
+
+        const session = startStreamingRecording({
+            onText: () => {
+                if (!stopRequested) {
+                    stopRequested = true
+                    session.stop()
+                }
+            },
+            onEnd: () => {
+                try {
+                    assert.strictEqual(promptCount, 1, 'Expected exactly one FFmpeg install prompt during Windows discovery')
+                    assert.strictEqual(discoveryCount, 2, 'Expected Windows device discovery to be retried after install prompt')
+                    done()
+                } catch (err) { done(err) }
+            },
+            onError: (err) => done(err),
+            chunkSeconds: 1,
+            _test: {
+                platform: 'win32',
+                spawnFfmpeg: fakeSpawnFfmpeg,
+                transcribeAudio: fakeTranscribe,
+                promptToInstallFfmpeg: async () => {
+                    promptCount++
+                    return true
+                },
+                discoverWindowsAudioDevices: async () => {
+                    discoveryCount++
+                    if (discoveryCount === 1) {
+                        return { devices: [], ffmpegMissing: true }
+                    }
+                    return { devices: ['Microphone (Test Device)'], ffmpegMissing: false }
+                },
+            },
+        })
+    })
 })
