@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import * as vscode from 'vscode'
-import { ensureSpeechApiKeyPrompted, getSpeechApiKey } from './speech_auth'
+import { getSpeechApiKey } from './speech_auth'
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -387,16 +387,6 @@ export function startStreamingRecording(opts: {
         opts.onError(err)
     }
 
-    function cancelBeforeStart() {
-        cleanup()
-        if (opts.onCancel) {
-            opts.onCancel()
-            return
-        }
-
-        opts.onEnd()
-    }
-
     function retryAfterFfmpegInstall(onRetry: () => void | Promise<void>) {
         if (ffmpegInstallPromptInProgress) {
             return
@@ -579,15 +569,6 @@ export function startStreamingRecording(opts: {
     // Resolve platform-specific device once before starting chunks
     void (async () => {
         try {
-            // Prompt for API key on first use (user can skip by leaving empty)
-            if (!opts._test) {
-                const proceed = await ensureSpeechApiKeyPrompted()
-                if (!proceed) {
-                    cancelBeforeStart()
-                    return
-                }
-            }
-
             if (cancelled || stopping) return
 
             if (runtimePlatform === 'win32') {

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { CREATE_SPECS_MODE_COMMAND, registerSpecsModeCommand } from './specsMode';
 import { AiFetchUrlLanguageModelTool } from './tools/ai_fetch_url';
-import { AskReportLanguageModelTool, getActiveAskReportPanel, openOrFocusAskReportById } from './tools/ask_report';
+import { AskReportLanguageModelTool, openOrFocusAskReportById } from './tools/ask_report';
 import { CodeCheckerLanguageModelTool } from './tools/code_checker';
 import { Context7GetLibraryDocsTool } from './tools/context7_get_library_docs';
 import { Context7ResolveLibraryIdTool } from './tools/context7_resolve_library_id';
@@ -23,7 +23,7 @@ import { GithubSearchCodeTool } from './tools/github_search_code';
 import { GithubSearchIssuesTool } from './tools/github_search_issues';
 import { GithubSearchRepositoriesTool } from './tools/github_search_repositories';
 import { GoogleSearchTool } from './tools/google_search';
-import { getHaltPanel, openOrFocusHaltForFeedback } from './tools/halt_for_feedback';
+import { openOrFocusHaltForFeedback } from './tools/halt_for_feedback';
 import { LinkupSearchTool } from './tools/linkup_search';
 import { RipgrepLanguageModelTool } from './tools/ripgrep';
 import { openAiFetchProgressPanelByUid } from './utils/ai_fetch_progress';
@@ -52,6 +52,7 @@ import { initLinkupSessionStorage, registerLinkupSessionConfigWatcher } from './
 import { hasSpeechApiKey, initSpeechAuth, setupOrUpdateSpeechApiKey } from './utils/speech_auth';
 import { selectInputDevice } from './utils/speechToText';
 import { statusBarActivity } from './utils/statusBar';
+import { toggleActiveVoiceInput } from './utils/voiceInputCommand';
 
 // Guard to ensure language model tools are registered only once per extension host process.
 let lmToolsRegistered = false;
@@ -739,15 +740,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
     vscode.commands.registerCommand('reliefpilot.linkup.setupApiKey', () => setupOrUpdateLinkupApiKey()),
     vscode.commands.registerCommand('reliefpilot.exa.setupApiKey', () => setupOrUpdateExaApiKey()),
     vscode.commands.registerCommand('reliefpilot.speech.setupApiKey', () => setupOrUpdateSpeechApiKey()),
-    vscode.commands.registerCommand('reliefpilot.voiceInput', () => {
-      // Toggle voice input in whichever panel is active
-      const askPanel = getActiveAskReportPanel()
-      const hPanel = getHaltPanel()
-      const target = askPanel?.visible ? askPanel : hPanel?.visible ? hPanel : askPanel ?? hPanel
-      if (target) {
-        void target.webview.postMessage({ type: 'toggleRecording' })
-      }
-    }),
+    vscode.commands.registerCommand('reliefpilot.voiceInput', () => toggleActiveVoiceInput()),
     vscode.commands.registerCommand('reliefpilot.speech.selectInputDevice', () => selectInputDevice()),
   );
   registerSpecsModeCommand(context);
