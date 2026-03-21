@@ -3,7 +3,7 @@
   "displayName": "Relief Pilot",
   "description": "A Swiss Army knife for AI agents in VS Code: safer tool calling, human-in-the-loop approvals, and smarter doc fetching to boost productivity and save you money.",
   "publisher": "ivan-mezentsev",
-  "version": "0.9.2",
+  "version": "1.0.0",
   "type": "commonjs",
   "icon": "icon.png",
   "categories": [
@@ -1234,7 +1234,7 @@
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "compile-tests": "node build.js --test",
     "pretest": "pnpm compile-tests",
-    "test": "vscode-test",
+    "test": "node scripts/run-vscode-tests.cjs",
     "package": "pnpm check-types && node build.js --production"
   },
   "devDependencies": {
