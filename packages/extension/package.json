@@ -102,6 +102,24 @@
         "command": "reliefpilot.askReport.showHistory",
         "title": "Relief Pilot: Show `Ask Report` History",
         "category": "Relief Pilot"
+      },
+      {
+        "command": "reliefpilot.voiceInput",
+        "title": "Relief Pilot: Toggle Voice Input",
+        "category": "Relief Pilot"
+      },
+      {
+        "command": "reliefpilot.speech.selectInputDevice",
+        "title": "Relief Pilot: Select Speech Input Device",
+        "category": "Relief Pilot"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "reliefpilot.voiceInput",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m",
+        "when": "activeWebviewPanelId == 'reliefpilot.askReport' || activeWebviewPanelId == 'reliefpilot.haltForFeedback'"
       }
     ],
     "configuration": {
@@ -197,6 +215,55 @@
           "minimum": 0,
           "maximum": 360000,
           "description": "Timeout in seconds for the ask-report webview. When > 0, the dialog shows a countdown and auto-cancels on expiration."
+        },
+        "reliefpilot.speechTranscriptionEndpoint": {
+          "type": "string",
+          "default": "https://api.groq.com/openai/v1",
+          "description": "Base URL for speech transcription API (without trailing slash). Default: https://api.groq.com/openai/v1. For local whisper.cpp or LocalAI, set e.g. http://127.0.0.1:8080/v1"
+        },
+        "reliefpilot.speechModel": {
+          "type": "string",
+          "default": "whisper-large-v3-turbo",
+          "description": "Speech-to-text model name sent to the transcription endpoint (for example whisper-large-v3-turbo, whisper-1, or your local model id)."
+        },
+        "reliefpilot.speechResponseFormat": {
+          "type": "string",
+          "default": "json",
+          "enum": [
+            "json",
+            "verbose_json"
+          ],
+          "markdownDescription": "Response format for speech transcription. `json` works with all endpoints. `verbose_json` enables segment-level hallucination filtering via `no_speech_prob` (supported by OpenAI, Groq, whisper.cpp)."
+        },
+        "reliefpilot.speechLinuxInputBackend": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "pulse",
+            "alsa"
+          ],
+          "description": "Linux microphone capture backend for ffmpeg. 'auto' tries pulse first, then alsa as fallback."
+        },
+        "reliefpilot.speechLinuxInputDevice": {
+          "type": "string",
+          "default": "default",
+          "markdownDescription": "Linux microphone input device passed to ffmpeg (for pulse or alsa). [Select device…](command:reliefpilot.speech.selectInputDevice)"
+        },
+        "reliefpilot.speechWindowsDevice": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Windows DirectShow audio device name for ffmpeg (e.g. `Microphone (Realtek High Definition Audio)`). Empty = auto-detect. [Select device…](command:reliefpilot.speech.selectInputDevice)"
+        },
+        "reliefpilot.speechMacDevice": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "macOS AVFoundation audio input device for ffmpeg (e.g. `:0`). Empty = `:default`. [Select device…](command:reliefpilot.speech.selectInputDevice)"
+        },
+        "reliefpilot.speechLanguage": {
+          "type": "string",
+          "default": "",
+          "description": "Language hint for speech-to-text transcription (e.g. 'en', 'ru', 'de'). Empty = auto-detect."
         }
       }
     },

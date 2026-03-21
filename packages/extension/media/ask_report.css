@@ -1,6 +1,7 @@
 /* VS Code themed styles for ask-report webview. */
 
-html, body {
+html,
+body {
   height: 100%;
 }
 
@@ -10,7 +11,19 @@ body {
   box-sizing: border-box;
   background: var(--vscode-editor-background);
   color: var(--vscode-editor-foreground);
-  font-family: var(--vscode-font-family, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, sans-serif);
+  font-family: var(
+    --vscode-font-family,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Ubuntu,
+    Cantarell,
+    Noto Sans,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
   font-size: var(--vscode-font-size, 13px);
   line-height: 1.4;
 }
@@ -43,18 +56,37 @@ body {
   pointer-events: none; /* allow clicks through except on buttons */
   z-index: 11; /* above content and progress line */
 }
-.askreport__main { display: block; }
-.askreport__footer { margin-top: 0.5rem; display: grid; gap: 0.4rem; }
-.spacer { flex: 1; }
-.timer { opacity: 0.8; font-size: 0.9em; }
+.askreport__main {
+  display: block;
+}
+.askreport__footer {
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 0.4rem;
+}
+.spacer {
+  flex: 1;
+}
+.timer {
+  opacity: 0.8;
+  font-size: 0.9em;
+}
 .timer {
   font-variant-numeric: tabular-nums;
   min-width: 2ch; /* avoid layout shift when counting down */
   text-align: right;
 }
 
-.options { border: none; padding: 0; margin: 0; }
-.actions { display: flex; gap: 0.5rem; justify-content: center; }
+.options {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
 
 /* Unified bottom dock that contains controls and actions */
 .askreport__dock {
@@ -67,20 +99,27 @@ body {
   box-shadow: 0 -1px 0 0 var(--vscode-editorWidget-border);
   z-index: 9;
 }
-.askreport__dock .actions { justify-content: center; gap: 8px; }
+.askreport__dock .actions {
+  justify-content: center;
+  gap: 8px;
+}
 
 .markdown {
   /* Scrollable Markdown container */
   overflow: auto;
   /* Reserve bottom area for fixed dock; add top padding for fixed header */
-  padding: 2.25rem 0.75rem calc(0.75rem + var(--askreport-dock-height, 128px)) 0.75rem;
+  padding: 2.25rem 0.75rem calc(0.75rem + var(--askreport-dock-height, 128px))
+    0.75rem;
   /* Remove visual chrome (border/background) to look native/plain */
   border: none;
   background: transparent !important;
   border-radius: 0;
 }
 
-.controls { display: grid; gap: 0.5rem; }
+.controls {
+  display: grid;
+  gap: 0.5rem;
+}
 
 .radio-group {
   display: grid;
@@ -88,11 +127,19 @@ body {
   gap: 6px;
 }
 
-.radio-group label { display: block; cursor: pointer; }
+.radio-group label {
+  display: block;
+  cursor: pointer;
+}
 
 /* Extra safety: even without .radio-group layout, make labels block */
-.options label.radio { display: block; margin: 2px 0; }
-.options input[type="radio"] { margin: 0; }
+.options label.radio {
+  display: block;
+  margin: 2px 0;
+}
+.options input[type="radio"] {
+  margin: 0;
+}
 
 /* Read-only/disabled state for options: make them clearly non-interactive */
 .options[disabled] .radio-group label,
@@ -111,12 +158,15 @@ textarea {
   padding: 0.5rem 0.6rem;
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, var(--vscode-editorWidget-border));
+  border: 1px solid
+    var(--vscode-input-border, var(--vscode-editorWidget-border));
   border-radius: 6px;
 }
 
 /* Hidden by default, shown when Custom is active or no options */
-textarea { display: none; }
+textarea {
+  display: none;
+}
 
 button {
   appearance: none;
@@ -131,7 +181,44 @@ button {
 button.secondary {
   color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
   background: var(--vscode-button-secondaryBackground, transparent);
-  border-color: var(--vscode-button-secondaryBorder, var(--vscode-editorWidget-border));
+  border-color: var(
+    --vscode-button-secondaryBorder,
+    var(--vscode-editorWidget-border)
+  );
+}
+
+.voice-input__button {
+  opacity: 0.75;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.voice-input__button:hover {
+  opacity: 1;
+}
+
+.voice-input__button--recording,
+.voice-input__button--processing {
+  opacity: 1 !important;
+}
+
+.voice-input__button--recording {
+  color: #e74c3c !important;
+  animation: reliefpilot-mic-pulse 1s ease-in-out infinite;
+}
+
+.voice-input__button--processing {
+  color: #f39c12 !important;
+  animation: reliefpilot-mic-pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes reliefpilot-mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* Icon-only buttons in toolbar */
@@ -147,9 +234,15 @@ button.secondary {
   border-color: transparent !important;
   pointer-events: auto; /* re-enable events for buttons inside header */
 }
-.icon-btn:hover { background: transparent !important; }
-.icon-btn:active { background: transparent !important; }
-.icon-btn svg { display: block; }
+.icon-btn:hover {
+  background: transparent !important;
+}
+.icon-btn:active {
+  background: transparent !important;
+}
+.icon-btn svg {
+  display: block;
+}
 
 button:disabled {
   opacity: 0.6;
@@ -161,21 +254,45 @@ button:hover {
   filter: brightness(1.05);
 }
 
-button:focus-visible, textarea:focus-visible, input[type="radio"]:focus-visible {
+button:focus-visible,
+textarea:focus-visible,
+input[type="radio"]:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 2px;
 }
 
 /* Basic markdown content styling (kept minimal) */
-.markdown h1, .markdown h2, .markdown h3 { margin: 0.8em 0 0.4em; }
-.markdown p { margin: 0.5em 0; }
-.markdown ul, .markdown ol { margin: 0.5em 0 0.5em 1.25em; }
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: 0.8em 0 0.4em;
+}
+.markdown p {
+  margin: 0.5em 0;
+}
+.markdown ul,
+.markdown ol {
+  margin: 0.5em 0 0.5em 1.25em;
+}
 /* Inline code */
-.markdown code { background: var(--vscode-textCodeBlock-background, var(--vscode-textPreformat-background, rgba(127,127,127,0.15))); padding: 0.1em 0.25em; border-radius: 4px; }
+.markdown code {
+  background: var(
+    --vscode-textCodeBlock-background,
+    var(--vscode-textPreformat-background, rgba(127, 127, 127, 0.15))
+  );
+  padding: 0.1em 0.25em;
+  border-radius: 4px;
+}
 
 /* Fenced code blocks */
 .markdown pre {
-  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-inactiveSelectionBackground, var(--vscode-editor-background)));
+  background: var(
+    --vscode-textCodeBlock-background,
+    var(
+      --vscode-editor-inactiveSelectionBackground,
+      var(--vscode-editor-background)
+    )
+  );
   padding: 0.6rem;
   border-radius: 6px;
   overflow: auto;
@@ -200,28 +317,72 @@ button:focus-visible, textarea:focus-visible, input[type="radio"]:focus-visible 
 }
 
 /* Minimal adaptive syntax colors for better contrast */
-body.vscode-dark .hljs-comment, body.vscode-high-contrast .hljs-comment { color: #6A9955; }
-body.vscode-dark .hljs-quote { color: #6A9955; }
-body.vscode-dark .hljs-keyword, body.vscode-dark .hljs-selector-tag { color: #C586C0; }
-body.vscode-dark .hljs-string, body.vscode-dark .hljs-meta .hljs-string { color: #CE9178; }
-body.vscode-dark .hljs-number, body.vscode-dark .hljs-literal { color: #B5CEA8; }
-body.vscode-dark .hljs-variable, body.vscode-dark .hljs-template-variable, body.vscode-dark .hljs-attr { color: #9CDCFE; }
-body.vscode-dark .hljs-title, body.vscode-dark .hljs-section { color: #4FC1FF; }
+body.vscode-dark .hljs-comment,
+body.vscode-high-contrast .hljs-comment {
+  color: #6a9955;
+}
+body.vscode-dark .hljs-quote {
+  color: #6a9955;
+}
+body.vscode-dark .hljs-keyword,
+body.vscode-dark .hljs-selector-tag {
+  color: #c586c0;
+}
+body.vscode-dark .hljs-string,
+body.vscode-dark .hljs-meta .hljs-string {
+  color: #ce9178;
+}
+body.vscode-dark .hljs-number,
+body.vscode-dark .hljs-literal {
+  color: #b5cea8;
+}
+body.vscode-dark .hljs-variable,
+body.vscode-dark .hljs-template-variable,
+body.vscode-dark .hljs-attr {
+  color: #9cdcfe;
+}
+body.vscode-dark .hljs-title,
+body.vscode-dark .hljs-section {
+  color: #4fc1ff;
+}
 
-body.vscode-light .hljs-comment, body.vscode-high-contrast-light .hljs-comment { color: #008000; }
-body.vscode-light .hljs-quote { color: #008000; }
-body.vscode-light .hljs-keyword, body.vscode-light .hljs-selector-tag { color: #0000FF; }
-body.vscode-light .hljs-string, body.vscode-light .hljs-meta .hljs-string { color: #A31515; }
-body.vscode-light .hljs-number, body.vscode-light .hljs-literal { color: #098658; }
-body.vscode-light .hljs-variable, body.vscode-light .hljs-template-variable, body.vscode-light .hljs-attr { color: #1F619C; }
-body.vscode-light .hljs-title, body.vscode-light .hljs-section { color: #795E26; }
+body.vscode-light .hljs-comment,
+body.vscode-high-contrast-light .hljs-comment {
+  color: #008000;
+}
+body.vscode-light .hljs-quote {
+  color: #008000;
+}
+body.vscode-light .hljs-keyword,
+body.vscode-light .hljs-selector-tag {
+  color: #0000ff;
+}
+body.vscode-light .hljs-string,
+body.vscode-light .hljs-meta .hljs-string {
+  color: #a31515;
+}
+body.vscode-light .hljs-number,
+body.vscode-light .hljs-literal {
+  color: #098658;
+}
+body.vscode-light .hljs-variable,
+body.vscode-light .hljs-template-variable,
+body.vscode-light .hljs-attr {
+  color: #1f619c;
+}
+body.vscode-light .hljs-title,
+body.vscode-light .hljs-section {
+  color: #795e26;
+}
 
 /* High contrast weight emphasis */
 body.vscode-high-contrast .hljs-keyword,
 body.vscode-high-contrast .hljs-string,
 body.vscode-high-contrast .hljs-number,
 body.vscode-high-contrast .hljs-variable,
-body.vscode-high-contrast .hljs-title { font-weight: 600; }
+body.vscode-high-contrast .hljs-title {
+  font-weight: 600;
+}
 
 /* Code block badge (language label + copy icon) */
 .code-badge {
@@ -239,27 +400,67 @@ body.vscode-high-contrast .hljs-title { font-weight: 600; }
   color: var(--vscode-foreground);
   cursor: pointer;
   opacity: 0.92;
-  transition: background 0.12s ease, opacity 0.12s ease, transform 0.06s ease;
+  transition:
+    background 0.12s ease,
+    opacity 0.12s ease,
+    transform 0.06s ease;
 }
-.code-badge:hover { opacity: 1; }
-.code-badge:active { transform: translateY(1px); }
-.code-badge .copy-icon { display: block; width: 10.5px; height: 10.5px; }
-.code-badge__lang { font-size: 8.25px; opacity: 0.85; text-transform: uppercase; }
-.code-badge.active { outline: 1px solid var(--vscode-focusBorder); }
+.code-badge:hover {
+  opacity: 1;
+}
+.code-badge:active {
+  transform: translateY(1px);
+}
+.code-badge .copy-icon {
+  display: block;
+  width: 10.5px;
+  height: 10.5px;
+}
+.code-badge__lang {
+  font-size: 8.25px;
+  opacity: 0.85;
+  text-transform: uppercase;
+}
+.code-badge.active {
+  outline: 1px solid var(--vscode-focusBorder);
+}
 
 /* Tables */
-.markdown table { border-collapse: collapse; width: 100%; margin: 0.75em 0; font-variant-numeric: tabular-nums; }
-.markdown th, .markdown td { border: 1px solid var(--vscode-editorWidget-border); padding: 4px 8px; text-align: left; vertical-align: top; }
-.markdown thead th { background: var(--vscode-editor-inactiveSelectionBackground, rgba(127,127,127,0.15)); }
-.markdown .table-wrapper { overflow-x: auto; }
-.markdown .table-wrapper table { min-width: fit-content; }
+.markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  font-variant-numeric: tabular-nums;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--vscode-editorWidget-border);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown thead th {
+  background: var(
+    --vscode-editor-inactiveSelectionBackground,
+    rgba(127, 127, 127, 0.15)
+  );
+}
+.markdown .table-wrapper {
+  overflow-x: auto;
+}
+.markdown .table-wrapper table {
+  min-width: fit-content;
+}
 
 /* Mermaid diagrams */
 .markdown .mermaid {
   /* Provides a container for the diagram with consistent styling */
   margin: 0.75em 0;
   padding: 1rem;
-  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  background: var(
+    --vscode-textCodeBlock-background,
+    var(--vscode-editor-background)
+  );
   border: 1px solid var(--vscode-editorWidget-border);
   border-radius: 6px;
   text-align: center; /* Center the diagram */

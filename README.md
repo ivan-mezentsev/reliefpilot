@@ -33,6 +33,38 @@ Can you check the docs and explain how the project works? #ask_report
 
 If a tool execution is declined, the error message will include your feedback
 
+### Voice Input (Speech-to-Text)
+
+Record audio via microphone and get real-time transcription directly in Ask Report and Halt for Feedback panels.
+
+**Prerequisites:**
+
+- [FFmpeg](https://ffmpeg.org/download.html) must be installed and available in `PATH`
+- A speech transcription API key (optional — you will be prompted on first use; leave empty if not needed)
+
+**Supported platforms:**
+
+| OS      | Audio backend     | Notes                                                    |
+| ------- | ----------------- | -------------------------------------------------------- |
+| Linux   | PulseAudio / ALSA | Auto-detects pulse, falls back to alsa                   |
+| macOS   | AVFoundation      | Uses `:default` input device                             |
+| Windows | DirectShow        | Auto-discovers devices; configure via settings if needed |
+
+**Where audio is sent:**
+Audio chunks are uploaded to the configured transcription endpoint (default: `https://api.groq.com/openai/v1/audio/transcriptions`). For local/private models, set `reliefpilot.speechTranscriptionEndpoint` (e.g. `http://127.0.0.1:8080/v1`). The API key is optional — on first use you will be prompted to enter one; leave it empty if your endpoint does not require authentication.
+
+**Settings:**
+
+- `reliefpilot.speechTranscriptionEndpoint` — transcription API base URL (default: Groq)
+- `reliefpilot.speechModel` — model name (e.g. `whisper-large-v3-turbo`)
+- `reliefpilot.speechLanguage` — language hint (e.g. `en`, `ru`)
+- `reliefpilot.speechLinuxInputBackend` — `auto`, `pulse`, or `alsa`
+- `reliefpilot.speechLinuxInputDevice` — ALSA/PulseAudio device name
+- `reliefpilot.speechWindowsDevice` — DirectShow device name (empty = auto-detect)
+- `reliefpilot.speechMacDevice` — AVFoundation device (e.g. `:0`; empty = `:default`)
+
+Each device setting has a **"Select device…"** link that opens a QuickPick with discovered devices for the current OS. You can also run `Relief Pilot: Select Speech Input Device` from the Command Palette.
+
 ### AI Fetch URL
 
 - The AI agent can fetch documentation in Markdown format, extracting content strictly by topic to save your context window — an alternative to RAG using Language Model APIs. Keep in mind that "thinking" models take longer per request (Time vs. Your Agent's Context Window Size), so we use any model without hallucinations and at zero cost per request.
@@ -191,6 +223,7 @@ If a tool execution is declined, the error message will include your feedback
    - [Create a GitHub Personal Access Token](https://github.com/settings/personal-access-tokens/new)
 
 5. Install ripgrep (rg) if not installed: [ripgrep installation](https://github.com/BurntSushi/ripgrep?tab=readme-ov-file#installation)
+6. _(Optional, for voice input)_ Install FFmpeg: [ffmpeg download](https://ffmpeg.org/download.html)
 
 ## Why Not MCP?
 

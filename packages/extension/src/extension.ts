@@ -6,12 +6,11 @@ import { CodeCheckerLanguageModelTool } from './tools/code_checker';
 import { Context7GetLibraryDocsTool } from './tools/context7_get_library_docs';
 import { Context7ResolveLibraryIdTool } from './tools/context7_resolve_library_id';
 import { DuckDuckGoSearchTool } from './tools/duckduckgo_search';
+import { ExaSearchTool } from './tools/exa_search';
 import { ExecuteCommandLanguageModelTool } from './tools/execute_command';
 import { FeloSearchTool } from './tools/felo_search';
 import { FocusEditorLanguageModelTool } from './tools/focus_editor';
 import { GetTerminalOutputLanguageModelTool } from './tools/get_terminal_output';
-import { openOrFocusHaltForFeedback } from './tools/halt_for_feedback';
-import { RipgrepLanguageModelTool } from './tools/ripgrep';
 import { GithubGetDirectoryContentsTool } from './tools/github_get_directory_contents';
 import { GithubGetFileContentsTool } from './tools/github_get_file_contents';
 import { GithubGetLatestReleaseTool } from './tools/github_get_latest_release';
@@ -24,8 +23,9 @@ import { GithubSearchCodeTool } from './tools/github_search_code';
 import { GithubSearchIssuesTool } from './tools/github_search_issues';
 import { GithubSearchRepositoriesTool } from './tools/github_search_repositories';
 import { GoogleSearchTool } from './tools/google_search';
+import { openOrFocusHaltForFeedback } from './tools/halt_for_feedback';
 import { LinkupSearchTool } from './tools/linkup_search';
-import { ExaSearchTool } from './tools/exa_search';
+import { RipgrepLanguageModelTool } from './tools/ripgrep';
 import { openAiFetchProgressPanelByUid } from './utils/ai_fetch_progress';
 import { initAiFetchSessionStorage, registerAiFetchSessionConfigWatcher } from './utils/ai_fetch_sessions';
 import { askReportHistory, formatTimestampSeconds, initAskReportHistoryStorage, registerAskReportHistoryConfigWatcher } from './utils/ask_report_history';
@@ -35,6 +35,9 @@ import { initContext7SessionStorage, registerContext7SessionConfigWatcher } from
 import { openDuckDuckGoContentPanelByUid } from './utils/duckduckgo_search_content_panel';
 import { initDuckDuckGoSessionStorage, registerDuckDuckGoSessionConfigWatcher } from './utils/duckduckgo_search_content_sessions';
 import { env, initEnv } from './utils/env';
+import { hasExaApiKey, initExaAuth, setupOrUpdateExaApiKey } from './utils/exa_search_auth';
+import { openExaContentPanelByUid } from './utils/exa_search_content_panel';
+import { initExaSessionStorage, registerExaSessionConfigWatcher } from './utils/exa_search_content_sessions';
 import { openFeloContentPanelByUid } from './utils/felo_search_content_panel';
 import { initFeloSessionStorage, registerFeloSessionConfigWatcher } from './utils/felo_search_content_sessions';
 import { hasGitHubToken, initGitHubAuth, setupOrUpdateGitHubToken } from './utils/github_auth';
@@ -46,10 +49,10 @@ import { initGoogleSessionStorage, registerGoogleSessionConfigWatcher } from './
 import { hasLinkupApiKey, initLinkupAuth, setupOrUpdateLinkupApiKey } from './utils/linkup_search_auth';
 import { openLinkupContentPanelByUid } from './utils/linkup_search_content_panel';
 import { initLinkupSessionStorage, registerLinkupSessionConfigWatcher } from './utils/linkup_search_content_sessions';
-import { hasExaApiKey, initExaAuth, setupOrUpdateExaApiKey } from './utils/exa_search_auth';
-import { openExaContentPanelByUid } from './utils/exa_search_content_panel';
-import { initExaSessionStorage, registerExaSessionConfigWatcher } from './utils/exa_search_content_sessions';
+import { hasSpeechApiKey, initSpeechAuth, setupOrUpdateSpeechApiKey } from './utils/speech_auth';
+import { selectInputDevice } from './utils/speechToText';
 import { statusBarActivity } from './utils/statusBar';
+import { toggleActiveVoiceInput } from './utils/voiceInputCommand';
 
 // Guard to ensure language model tools are registered only once per extension host process.
 let lmToolsRegistered = false;
@@ -338,6 +341,7 @@ async function showReliefPilotMenu() {
   const googleSearchEngineIdExists = await hasGoogleSearchEngineId();
   const linkupApiKeyExists = await hasLinkupApiKey();
   const exaApiKeyExists = await hasExaApiKey();
+  const speechApiKeyExists = await hasSpeechApiKey();
   const tokenMenuLabel = context7TokenExists
     ? 'Update API-token `context7`'
     : 'Setup API-token `context7`';
@@ -356,6 +360,9 @@ async function showReliefPilotMenu() {
   const exaApiKeyMenuLabel = exaApiKeyExists
     ? 'Update API-token `EXA_API_KEY`'
     : 'Setup API-token `EXA_API_KEY`';
+  const speechApiKeyMenuLabel = speechApiKeyExists
+    ? 'Update API-token `SPEECH_API_KEY`'
+    : 'Setup API-token `SPEECH_API_KEY`';
 
   const items: vscode.QuickPickItem[] = [
     {
@@ -402,6 +409,10 @@ async function showReliefPilotMenu() {
       label: exaApiKeyMenuLabel,
       description: exaApiKeyExists ? 'Change stored Exa API token `EXA_API_KEY`' : 'Store a new Exa API token `EXA_API_KEY` securely',
     },
+    {
+      label: speechApiKeyMenuLabel,
+      description: speechApiKeyExists ? 'Change stored Speech API token `SPEECH_API_KEY`' : 'Store a new Speech API token `SPEECH_API_KEY` securely',
+    },
   ];
 
   const pick = await vscode.window.showQuickPick(items, {
@@ -437,6 +448,8 @@ async function showReliefPilotMenu() {
     await setupOrUpdateLinkupApiKey();
   } else if (pick.label === exaApiKeyMenuLabel) {
     await setupOrUpdateExaApiKey();
+  } else if (pick.label === speechApiKeyMenuLabel) {
+    await setupOrUpdateSpeechApiKey();
   }
 }
 
@@ -680,6 +693,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   initGoogleAuth(context);
   initLinkupAuth(context);
   initExaAuth(context);
+  initSpeechAuth(context);
   // Initialize ask_report history storage (load from workspace storage)
   initAskReportHistoryStorage(context);
   // Initialize session storage
@@ -725,6 +739,9 @@ export const activate = async (context: vscode.ExtensionContext) => {
     vscode.commands.registerCommand('reliefpilot.google.setupSearchEngineId', () => setupOrUpdateGoogleSearchEngineId()),
     vscode.commands.registerCommand('reliefpilot.linkup.setupApiKey', () => setupOrUpdateLinkupApiKey()),
     vscode.commands.registerCommand('reliefpilot.exa.setupApiKey', () => setupOrUpdateExaApiKey()),
+    vscode.commands.registerCommand('reliefpilot.speech.setupApiKey', () => setupOrUpdateSpeechApiKey()),
+    vscode.commands.registerCommand('reliefpilot.voiceInput', () => toggleActiveVoiceInput()),
+    vscode.commands.registerCommand('reliefpilot.speech.selectInputDevice', () => selectInputDevice()),
   );
   registerSpecsModeCommand(context);
   showServerStatusBar();

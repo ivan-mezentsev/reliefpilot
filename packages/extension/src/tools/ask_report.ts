@@ -11,39 +11,24 @@ import { askReportHistory } from '../utils/ask_report_history'
 import { env } from '../utils/env'
 import { haltForFeedbackController } from '../utils/haltForFeedbackController'
 import { statusBarActivity } from '../utils/statusBar'
+import { createWebviewVoiceInputController } from '../utils/webviewVoiceInputController'
 
-// Types for ask_report tool API
-// These types follow the design spec and are minimal to compile and integrate.
 export type AskReportOptions = {
-    // Title of the panel window; defaults to "Ask Report" if not provided
     title?: string
-    // Markdown content to display in the webview
     markdown: string
-    // Optional pre-filled value for the textarea in the webview
     initialValue?: string
-    // Optional predefined options to render as radio buttons
     predefinedOptions?: string[]
-    // When true, render as read-only viewer: disable all controls and hide timer
     readOnly?: boolean
 
-    // Start the timer in paused state (webview local pause). Used for Halt for Feedback integration.
-    // Not part of the public tool API; used internally by the extension.
     startPaused?: boolean
 
-    // Force-select the Custom option in the webview (when options exist).
-    // Not part of the public tool API; used internally by the extension.
     preselectCustom?: boolean
-    // Internal link to history entry to keep single webview per report
-    // Not part of the public tool API; used by tool/commands integration only
     historyId?: string
 }
 
 export type AskUserResult = {
-    // User's decision
     decision: 'Submit' | 'Cancel'
-    // The submitted value (empty string for Cancel/close)
     value: string
-    // True when the result was resolved due to timeout (not used in this scaffold)
     timeout?: boolean
 }
 
@@ -53,9 +38,15 @@ export type AskReportInput = {
     predefinedOptions?: string[]
 }
 
-// Create a webview panel for ask_report and return a placeholder Cancel result for now.
+let activeAskReportPanel: vscode.WebviewPanel | undefined
+
+export function getActiveAskReportPanel(): vscode.WebviewPanel | undefined {
+    return activeAskReportPanel
+}
+
 export async function askReport(opts: AskReportOptions): Promise<AskUserResult> {
     const title = opts.title ?? 'Ask Report'
+    const voiceInputEnabled = opts.readOnly !== true
 
     // Read timeout from settings early because initial webview rendering must not depend on postMessage timing.
     const timeout = vscode.workspace
@@ -76,6 +67,8 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
             localResourceRoots: [mediaRoot],
         },
     )
+
+    activeAskReportPanel = panel
 
     // Bind this panel instance to history entry (if any) to avoid duplicates
     if (opts.historyId) {
@@ -111,6 +104,11 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
     const hljsCssUri = panel.webview.asWebviewUri(
         vscode.Uri.joinPath(extensionUri, 'media', 'highlight.github.css'),
     )
+    const voiceInputUri = voiceInputEnabled
+        ? panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(extensionUri, 'media', 'voice-input.js'),
+        )
+        : undefined
 
     // Generate secure HTML with CSP, connect marked.min.js via asWebviewUri, and build UI containers.
     const nonce = generateNonce()
@@ -161,7 +159,14 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         <footer class="askreport__footer askreport__dock" id="bottomDock">
             <div class="controls">
                 <fieldset id="optionsFieldset" class="options" aria-label="Ask report options"></fieldset>
-                <textarea id="customText" class="textarea" aria-label="Custom response" placeholder="Type your response…"></textarea>
+                <div class="textarea-mic-wrap" style="position:relative;">
+                  <textarea id="customText" class="textarea" aria-label="Custom response" placeholder="Type your response…"></textarea>
+                                    ${voiceInputEnabled ? `<button id="micBtn" class="btn secondary voice-input__button" aria-label="Voice input" title="Voice input" style="position:absolute;bottom:6px;right:6px;width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-7 8h2a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.93V21h-4v-3.07A7 7 0 0 1 5 11z"/>
+                                        </svg>
+                                    </button>` : ''}
+                </div>
             </div>
             <div class="actions">
                 <button id="submitBtn" class="btn primary" aria-label="Submit" disabled>Submit</button>
@@ -316,6 +321,23 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                     return;
                 }
                 el.textarea.style.display = usingCustom ? 'block' : 'none';
+            }
+
+            function activateCustomOption() {
+                const custom = el.options.querySelector('#opt_custom');
+                if (custom) {
+                    /** @type {HTMLInputElement} */ (custom).checked = true;
+                    custom.dispatchEvent(new Event('change'));
+                    return;
+                }
+
+                usingCustom = true;
+                selected = '';
+                updateSubmitState();
+                updateTextareaVisibility();
+                updateDockHeightVar();
+                try { el.textarea.focus(); } catch {}
+                persistState();
             }
 
                 function updateDockHeightVar() {
@@ -546,16 +568,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                 // - start timer paused when requested
                 if (!initData.readonly) {
                     if (initData.preselectCustom === true) {
-                        const custom = el.options.querySelector('#opt_custom');
-                        if (custom) {
-                            /** @type {HTMLInputElement} */ (custom).checked = true;
-                            usingCustom = true;
-                            selected = '';
-                        } else {
-                            // If there are no options rendered, we are already in textarea-only mode.
-                            usingCustom = true;
-                            selected = '';
-                        }
+                        activateCustomOption();
                     }
                 }
 
@@ -611,7 +624,12 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
 
             window.addEventListener('message', (event) => {
                 const msg = event.data;
-                if (!msg || msg.type !== 'init') return;
+                if (!msg || typeof msg !== 'object') return;
+                if (msg.type === 'activateCustom') {
+                    activateCustomOption();
+                    return;
+                }
+                if (msg.type !== 'init') return;
                 applyInit(msg.payload);
             });
 
@@ -637,15 +655,27 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
             // (Markdown decoration helpers moved to shared media/markdown-enhance.js)
 
         </script>
+    ${voiceInputEnabled && voiceInputUri
+        ? `<script nonce="${nonce}" src="${voiceInputUri}"></script>
+    <script nonce="${nonce}">window.ReliefPilotVoiceInput.init({ micBtn: document.getElementById('micBtn'), textarea: el.textarea, vscode: vscode });</script>`
+        : ''}
     </body>
 </html>`
 
     // Return a promise that resolves based on webview messages or panel disposal
     return await new Promise<AskUserResult>((resolve) => {
         let settled = false
+        const voiceController = createWebviewVoiceInputController({
+            panel,
+            enableVoiceInput: voiceInputEnabled,
+            onBeforeStart: () => {
+                void panel.webview.postMessage({ type: 'activateCustom' })
+            },
+        })
         const finalize = (res: AskUserResult) => {
             if (!settled) {
                 settled = true
+                voiceController.dispose()
                 try { panel.dispose() } catch { /* noop */ }
                 resolve(res)
             }
@@ -656,6 +686,10 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         // Handle messages from webview
         disposables.push(
             panel.webview.onDidReceiveMessage(async (msg: any) => {
+                if (voiceController.handleMessage(msg)) {
+                    return
+                }
+
                 if (!msg || typeof msg !== 'object') return
                 switch (msg.type) {
                     case 'submit': {
@@ -710,6 +744,8 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         // Resolve Cancel if panel is closed without decision
         disposables.push(
             panel.onDidDispose(() => {
+                voiceController.dispose()
+                if (activeAskReportPanel === panel) activeAskReportPanel = undefined
                 if (opts.historyId) {
                     try {
                         const entry = askReportHistory.getById(opts.historyId)
@@ -892,6 +928,6 @@ function serializeForHtmlScriptTag(value: unknown): string {
         .replace(/</g, '\\u003c')
         .replace(/>/g, '\\u003e')
         .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029')
 }

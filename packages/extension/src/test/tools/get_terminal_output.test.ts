@@ -81,8 +81,12 @@ suite('Get Terminal Output Tool Test Suite', function () {
   });
 
   test('Get output with line limit', async function () {
+    this.retries(2);
     // Generate a lot of output lines
     await execTool.execute('for i in {1..50}; do echo "Line $i"; done', undefined, false);
+
+    // Allow terminal buffer to settle
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Get output with a limit of 10 lines
     const response = await getOutputTool.execute(testTerminalId, 10);

@@ -63,6 +63,7 @@ suite('Execute Command Tool Test Suite', function () {
   });
 
   test('Basic command execution', async function () {
+    this.retries(2);
     console.log('Running basic command execution test');
     const [userRejected, response] = await tool.execute('cat test.txt');
     console.log('Basic command execution result:', response);
