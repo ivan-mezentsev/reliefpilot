@@ -340,6 +340,23 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                 el.textarea.style.display = usingCustom ? 'block' : 'none';
             }
 
+            function activateCustomOption() {
+                const custom = el.options.querySelector('#opt_custom');
+                if (custom) {
+                    /** @type {HTMLInputElement} */ (custom).checked = true;
+                    custom.dispatchEvent(new Event('change'));
+                    return;
+                }
+
+                usingCustom = true;
+                selected = '';
+                updateSubmitState();
+                updateTextareaVisibility();
+                updateDockHeightVar();
+                try { el.textarea.focus(); } catch {}
+                persistState();
+            }
+
                 function updateDockHeightVar() {
                     try {
                         const root = document.documentElement;
@@ -568,16 +585,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                 // - start timer paused when requested
                 if (!initData.readonly) {
                     if (initData.preselectCustom === true) {
-                        const custom = el.options.querySelector('#opt_custom');
-                        if (custom) {
-                            /** @type {HTMLInputElement} */ (custom).checked = true;
-                            usingCustom = true;
-                            selected = '';
-                        } else {
-                            // If there are no options rendered, we are already in textarea-only mode.
-                            usingCustom = true;
-                            selected = '';
-                        }
+                        activateCustomOption();
                     }
                 }
 
@@ -633,7 +641,12 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
 
             window.addEventListener('message', (event) => {
                 const msg = event.data;
-                if (!msg || msg.type !== 'init') return;
+                if (!msg || typeof msg !== 'object') return;
+                if (msg.type === 'activateCustom') {
+                    activateCustomOption();
+                    return;
+                }
+                if (msg.type !== 'init') return;
                 applyInit(msg.payload);
             });
 
@@ -733,6 +746,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                     case 'startRecording': {
                         if (!voiceInputEnabled) return
                         activeRecording?.cancel()
+                        void panel.webview.postMessage({ type: 'activateCustom' })
                         const myId = ++recordingSessionId
                         const session = startStreamingRecording({
                             onText: (text: string) => {
