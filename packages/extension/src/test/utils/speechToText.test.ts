@@ -271,16 +271,17 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
 
     test('cleanup removes temporary WAV files', function (done) {
         const tmpDir = os.tmpdir()
+        const existingDirs = new Set(
+            fs.readdirSync(tmpDir).filter((f) => f.startsWith('reliefpilot-stream-')),
+        )
         const { fakeSpawnFfmpeg } = createFakeSpawn(20)
         const session = startStreamingRecording({
             onText: () => { },
             onEnd: () => {
                 try {
-                    // After end, temp files should be cleaned up
-                    const leftover = fs.readdirSync(tmpDir).filter((f) => f.startsWith('reliefpilot-stream-'))
-                    // Note: test-injected fakeSpawnFfmpeg does not write real files,
-                    // so cleanup has nothing to remove — just verify no crash.
-                    assert.ok(Array.isArray(leftover), 'Expected array from readdirSync')
+                    const leftover = fs.readdirSync(tmpDir)
+                        .filter((f) => f.startsWith('reliefpilot-stream-') && !existingDirs.has(f))
+                    assert.deepStrictEqual(leftover, [], 'Expected stop() to remove newly created temp directories')
                     done()
                 } catch (err) { done(err) }
             },

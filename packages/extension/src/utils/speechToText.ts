@@ -403,6 +403,10 @@ export function startStreamingRecording(opts: {
         stopping = false
         abortController.abort()
         try { proc?.kill('SIGKILL') } catch { /* ignore */ }
+        removeTempArtifacts()
+    }
+
+    function removeTempArtifacts() {
         for (let i = 0; i <= chunkIndex; i++) {
             try { fs.unlinkSync(path.join(tmpDir, `${prefix}-${i}.wav`)) } catch { /* ignore */ }
         }
@@ -467,6 +471,12 @@ export function startStreamingRecording(opts: {
                 while (inFlight.size > 0) {
                     await Promise.allSettled([...inFlight])
                 }
+
+                // Best-effort cleanup for the graceful stop path as well.
+                // The recording process should already be closed here, but if it
+                // outlived the wait window, terminate it before removing temp files.
+                try { proc?.kill('SIGKILL') } catch { /* ignore */ }
+                removeTempArtifacts()
 
                 cancelled = true
                 stopping = false
