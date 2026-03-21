@@ -1235,7 +1235,6 @@
     "compile-tests": "node build.js --test",
     "pretest": "pnpm compile-tests",
     "test": "vscode-test",
-    "local-install": "pnpm run generate:icon && pnpm check-types && node build.js --production && cross-env npm_config_user_agent=pnpm vsce package --no-dependencies && code --install-extension reliefpilot-$(node -p \"require('./package.json').version\").vsix --force",
     "package": "pnpm check-types && node build.js --production"
   },
   "devDependencies": {
