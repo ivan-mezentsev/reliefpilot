@@ -63,6 +63,7 @@ export function getActiveAskReportPanel(): vscode.WebviewPanel | undefined {
 // Create a webview panel for ask_report and return a placeholder Cancel result for now.
 export async function askReport(opts: AskReportOptions): Promise<AskUserResult> {
     const title = opts.title ?? 'Ask Report'
+    const voiceInputEnabled = opts.readOnly !== true
 
     // Read timeout from settings early because initial webview rendering must not depend on postMessage timing.
     const timeout = vscode.workspace
@@ -120,9 +121,11 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
     const hljsCssUri = panel.webview.asWebviewUri(
         vscode.Uri.joinPath(extensionUri, 'media', 'highlight.github.css'),
     )
-    const voiceInputUri = panel.webview.asWebviewUri(
-        vscode.Uri.joinPath(extensionUri, 'media', 'voice-input.js'),
-    )
+    const voiceInputUri = voiceInputEnabled
+        ? panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(extensionUri, 'media', 'voice-input.js'),
+        )
+        : undefined
 
     // Generate secure HTML with CSP, connect marked.min.js via asWebviewUri, and build UI containers.
     const nonce = generateNonce()
@@ -175,11 +178,11 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                 <fieldset id="optionsFieldset" class="options" aria-label="Ask report options"></fieldset>
                 <div class="textarea-mic-wrap" style="position:relative;">
                   <textarea id="customText" class="textarea" aria-label="Custom response" placeholder="Type your response…"></textarea>
-                  <button id="micBtn" class="btn secondary" aria-label="Voice input" title="Voice input" style="position:absolute;bottom:6px;right:6px;width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;opacity:0.75;transition:opacity 0.15s;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-7 8h2a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.93V21h-4v-3.07A7 7 0 0 1 5 11z"/>
-                    </svg>
-                  </button>
+                                    ${voiceInputEnabled ? `<button id="micBtn" class="btn secondary" aria-label="Voice input" title="Voice input" style="position:absolute;bottom:6px;right:6px;width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;opacity:0.75;transition:opacity 0.15s;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-7 8h2a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.93V21h-4v-3.07A7 7 0 0 1 5 11z"/>
+                                        </svg>
+                                    </button>` : ''}
                 </div>
             </div>
             <div class="actions">
@@ -656,8 +659,10 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
             // (Markdown decoration helpers moved to shared media/markdown-enhance.js)
 
         </script>
-    <script nonce="${nonce}" src="${voiceInputUri}"></script>
-    <script nonce="${nonce}">initVoiceInput({ micBtn: document.getElementById('micBtn'), textarea: el.textarea, vscode: vscode });</script>
+    ${voiceInputEnabled && voiceInputUri
+        ? `<script nonce="${nonce}" src="${voiceInputUri}"></script>
+    <script nonce="${nonce}">initVoiceInput({ micBtn: document.getElementById('micBtn'), textarea: el.textarea, vscode: vscode });</script>`
+        : ''}
     </body>
 </html>`
 
@@ -726,6 +731,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                         return
                     }
                     case 'startRecording': {
+                        if (!voiceInputEnabled) return
                         activeRecording?.cancel()
                         const myId = ++recordingSessionId
                         const session = startStreamingRecording({
@@ -749,6 +755,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                         return
                     }
                     case 'stopRecording': {
+                        if (!voiceInputEnabled) return
                         const rec = activeRecording
                         activeRecording = undefined
                         rec?.stop()
