@@ -1234,7 +1234,7 @@
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "compile-tests": "node build.js --test",
     "pretest": "pnpm compile-tests",
-    "test": "vscode-test",
+    "test": "node scripts/run-vscode-tests.cjs",
     "package": "pnpm check-types && node build.js --production"
   },
   "devDependencies": {
