@@ -199,23 +199,38 @@ suite('speechToText — startStreamingRecording lifecycle', function () {
     test('onText receives transcribed text from chunks', function (done) {
         const { fakeSpawnFfmpeg } = createFakeSpawn(30)
         const texts: string[] = []
+        let stopRequested = false
+
+        const timeout = setTimeout(() => {
+            if (!stopRequested) {
+                session.cancel()
+                done(new Error('Timed out waiting for the first onText callback'))
+            }
+        }, 5000)
 
         const session = startStreamingRecording({
-            onText: (t) => texts.push(t),
+            onText: (t) => {
+                texts.push(t)
+                if (!stopRequested) {
+                    stopRequested = true
+                    session.stop()
+                }
+            },
             onEnd: () => {
                 try {
+                    clearTimeout(timeout)
                     assert.ok(texts.length > 0, 'Expected at least one transcribed text')
                     assert.ok(texts.some((t) => t.startsWith('chunk-')), 'Expected fake transcription output')
                     done()
                 } catch (err) { done(err) }
             },
-            onError: (err) => done(err),
+            onError: (err) => {
+                clearTimeout(timeout)
+                done(err)
+            },
             chunkSeconds: 1,
             _test: { spawnFfmpeg: fakeSpawnFfmpeg, transcribeAudio: fakeTranscribe },
         })
-
-        // Let some chunks through, then stop
-        setTimeout(() => session.stop(), 200)
     })
 
     test('chunks are emitted in order despite variable transcription delays', function (done) {
