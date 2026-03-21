@@ -214,6 +214,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    ```
 
 4. Stock up on tokens — you'll need them for maximum comfort:
+
    - [context7.com/dashboard](https://context7.com/dashboard)
    - [Google API Key](https://support.google.com/googleapi/answer/6158862?hl=en) (free 100 req/day)
    - [Google Search Engine ID](https://support.google.com/programmable-search/answer/12499034?hl=en)
