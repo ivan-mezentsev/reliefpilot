@@ -103,6 +103,29 @@ export function buildFfmpegArgs(opts: { outputFile: string; chunkSeconds?: numbe
     return ['-f', 'dshow', '-i', `audio=${dev}`, ...common, ...duration, '-y', opts.outputFile]
 }
 
+function buildStreamingFfmpegArgs(opts: { outputPattern: string; chunkSeconds: number; linuxBackend?: LinuxInputBackend; windowsDevice?: string; macDevice?: string }): string[] {
+    const common = ['-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le']
+    const segment = [
+        '-f', 'segment',
+        '-segment_time', String(opts.chunkSeconds),
+        '-segment_format', 'wav',
+        '-reset_timestamps', '1',
+        '-segment_start_number', '0',
+        opts.outputPattern,
+    ]
+
+    if (process.platform === 'linux') {
+        const backend = opts.linuxBackend ?? 'pulse'
+        return ['-f', backend, '-i', getLinuxDevice(), ...common, ...segment]
+    }
+    if (process.platform === 'darwin') {
+        const dev = opts.macDevice || ':default'
+        return ['-f', 'avfoundation', '-i', dev, ...common, ...segment]
+    }
+    const dev = opts.windowsDevice ?? 'default'
+    return ['-f', 'dshow', '-i', `audio=${dev}`, ...common, ...segment]
+}
+
 function spawnFfmpeg(args: string[]): { proc: ChildProcess; getStderr: () => string } {
     let stderrText = ''
     const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] })
@@ -115,30 +138,6 @@ function spawnFfmpeg(args: string[]): { proc: ChildProcess; getStderr: () => str
 
 function describeFfmpegFailure(stderrText: string): string {
     return stderrText.trim().split('\n').slice(-6).join('\n').trim() || 'unknown FFmpeg error'
-}
-
-// ── File readiness polling ───────────────────────────────────────────
-
-async function waitForFileReady(filePath: string, timeoutMs: number): Promise<boolean> {
-    const started = Date.now()
-    let lastSize = -1
-    let stableCount = 0
-
-    while (Date.now() - started < timeoutMs) {
-        try {
-            const size = fs.statSync(filePath).size
-            if (size > 1000) {
-                if (size === lastSize) {
-                    if (++stableCount >= 2) return true
-                } else {
-                    stableCount = 0
-                    lastSize = size
-                }
-            }
-        } catch { /* file may not exist yet */ }
-        await new Promise((r) => setTimeout(r, 120))
-    }
-    return false
 }
 
 // ── Whisper hallucination filter ─────────────────────────────────────
@@ -310,17 +309,19 @@ export function startStreamingRecording(opts: {
     const chunkSec = opts.chunkSeconds ?? 3
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reliefpilot-stream-'))
     const prefix = path.basename(tmpDir)
-    let chunkIndex = 0
     let proc: ChildProcess | undefined
     let cancelled = false
     let stopping = false
     let linuxBackendIdx = 0
     let stderrGetter: (() => string) | undefined
-    let chunkCloseResolver: (() => void) | undefined
+    let processCloseResolver: (() => void) | undefined
     let resolvedWindowsDevice: string | undefined
     let resolvedMacDevice: string | undefined
     let ffmpegInstallRetried = false
     let ffmpegInstallPromptInProgress = false
+    let pollTimer: NodeJS.Timeout | undefined
+    let nextChunkIndex = 0
+    let producedAnyChunk = false
 
     // Session-level abort controller — aborts all in-flight fetch requests
     const abortController = new AbortController()
@@ -349,7 +350,8 @@ export function startStreamingRecording(opts: {
         }
     }
 
-    const chunkFile = () => path.join(tmpDir, `${prefix}-${chunkIndex}.wav`)
+    const chunkFile = (index: number) => path.join(tmpDir, `${prefix}-${String(index).padStart(6, '0')}.wav`)
+    const outputPattern = path.join(tmpDir, `${prefix}-%06d.wav`)
 
     function canFallbackLinuxBackend(): boolean {
         if (process.platform !== 'linux' || stopping) return false
@@ -389,7 +391,7 @@ export function startStreamingRecording(opts: {
 
                 if (retry) {
                     ffmpegInstallRetried = true
-                    startChunk()
+                    startContinuousRecording()
                     return
                 }
 
@@ -401,77 +403,113 @@ export function startStreamingRecording(opts: {
         })()
     }
 
-    function startChunk() {
+    function queueChunkProcessing(filePath: string, chunkIndex: number) {
+        producedAnyChunk = true
+        const task = (async () => {
+            try {
+                const buf = fs.readFileSync(filePath)
+                fs.unlinkSync(filePath)
+                await transcribeAndEmit(buf, (text) => enqueueEmit(chunkIndex, text), opts._test?.transcribeAudio, abortController.signal)
+                if (!pendingEmits.has(chunkIndex) && chunkIndex >= nextEmitIndex) {
+                    enqueueEmit(chunkIndex, null)
+                }
+            } catch (err) {
+                if (!stopping && !cancelled) {
+                    failRecording(err instanceof Error ? err : new Error(String(err)))
+                }
+            }
+        })()
+        inFlight.add(task)
+        void task.finally(() => inFlight.delete(task))
+    }
+
+    function flushReadyChunks(final = false) {
+        while (true) {
+            const current = chunkFile(nextChunkIndex)
+            if (!fs.existsSync(current)) {
+                return
+            }
+
+            const next = chunkFile(nextChunkIndex + 1)
+            if (!final && !fs.existsSync(next)) {
+                return
+            }
+
+            const chunkIndex = nextChunkIndex
+            nextChunkIndex++
+            queueChunkProcessing(current, chunkIndex)
+        }
+    }
+
+    function stopPolling() {
+        if (pollTimer) {
+            clearInterval(pollTimer)
+            pollTimer = undefined
+        }
+    }
+
+    function startPolling() {
+        stopPolling()
+        pollTimer = setInterval(() => {
+            if (cancelled) return
+            flushReadyChunks(false)
+        }, 200)
+    }
+
+    function startContinuousRecording() {
         if (cancelled || stopping) return
 
-        const file = chunkFile()
         const backends = getLinuxBackends()
         const linuxBackend = process.platform === 'linux'
             ? (backends[linuxBackendIdx] ?? backends[0] ?? 'pulse')
             : undefined
 
-        const ffmpegArgs = buildFfmpegArgs({ outputFile: file, chunkSeconds: chunkSec, linuxBackend, windowsDevice: resolvedWindowsDevice, macDevice: resolvedMacDevice })
+        const ffmpegArgs = buildStreamingFfmpegArgs({ outputPattern, chunkSeconds: chunkSec, linuxBackend, windowsDevice: resolvedWindowsDevice, macDevice: resolvedMacDevice })
         const started = (opts._test?.spawnFfmpeg ?? spawnFfmpeg)(ffmpegArgs)
         proc = started.proc
         stderrGetter = started.getStderr
         let skipCloseHandling = false
 
+        startPolling()
+
         proc.on('close', () => {
-            if (skipCloseHandling) {
-                chunkCloseResolver?.()
-                chunkCloseResolver = undefined
-                return
-            }
+            stopPolling()
 
-            if (cancelled) {
-                chunkCloseResolver?.()
-                chunkCloseResolver = undefined
-                return
-            }
-
-            const capturedFile = file
-            const capturedIdx = chunkIndex
-            const task = (async () => {
-                try {
-                    const ready = await waitForFileReady(capturedFile, 1500)
-                    if (!ready) {
-                        if (canFallbackLinuxBackend()) {
-                            linuxBackendIdx++
-                            startChunk()
-                            return
-                        }
-                        if (!stopping) {
-                            throw new Error(`Microphone recording failed: ${describeFfmpegFailure(stderrGetter?.() ?? '')}`)
-                        }
-                        return
-                    }
-                    const buf = fs.readFileSync(capturedFile)
-                    fs.unlinkSync(capturedFile)
-                    await transcribeAndEmit(buf, (text) => enqueueEmit(capturedIdx, text), opts._test?.transcribeAudio, abortController.signal)
-                    // If transcription produced no text, still mark slot as done
-                    if (!pendingEmits.has(capturedIdx) && capturedIdx >= nextEmitIndex) {
-                        enqueueEmit(capturedIdx, null)
-                    }
-                } catch (err) {
-                    if (!stopping && !cancelled) {
-                        cleanup()
-                        opts.onError(err as Error)
-                        return
-                    }
+            const finalizeClose = () => {
+                if (skipCloseHandling) {
+                    processCloseResolver?.()
+                    processCloseResolver = undefined
+                    return
                 }
-            })()
-            inFlight.add(task)
-            void task.finally(() => inFlight.delete(task))
 
-            // Resolve AFTER the task is registered in inFlight so stop() drain sees it
-            chunkCloseResolver?.()
-            chunkCloseResolver = undefined
+                if (cancelled) {
+                    processCloseResolver?.()
+                    processCloseResolver = undefined
+                    return
+                }
 
-            chunkIndex++
-            if (!cancelled && !stopping) startChunk()
+                flushReadyChunks(true)
+                processCloseResolver?.()
+                processCloseResolver = undefined
+
+                if (stopping) {
+                    return
+                }
+
+                if (!producedAnyChunk && canFallbackLinuxBackend()) {
+                    linuxBackendIdx++
+                    startContinuousRecording()
+                    return
+                }
+
+                failRecording(new Error(`Microphone recording failed: ${describeFfmpegFailure(stderrGetter?.() ?? '')}`))
+            }
+
+            finalizeClose()
         })
 
         proc.on('error', (err) => {
+            stopPolling()
             skipCloseHandling = true
             handleFfmpegSpawnError(err)
         })
@@ -481,14 +519,19 @@ export function startStreamingRecording(opts: {
         cancelled = true
         stopping = false
         abortController.abort()
+        stopPolling()
         try { proc?.kill('SIGKILL') } catch { /* ignore */ }
         removeTempArtifacts()
     }
 
     function removeTempArtifacts() {
-        for (let i = 0; i <= chunkIndex; i++) {
-            try { fs.unlinkSync(path.join(tmpDir, `${prefix}-${i}.wav`)) } catch { /* ignore */ }
-        }
+        try {
+            for (const file of fs.readdirSync(tmpDir)) {
+                if (file.endsWith('.wav')) {
+                    try { fs.unlinkSync(path.join(tmpDir, file)) } catch { /* ignore */ }
+                }
+            }
+        } catch { /* ignore */ }
         try { fs.rmdirSync(tmpDir) } catch { /* ignore — may not be empty */ }
     }
 
@@ -527,7 +570,7 @@ export function startStreamingRecording(opts: {
                 // macOS falls back to :default if no device discovered
             }
         }
-        startChunk()
+        startContinuousRecording()
     })()
 
     return {
@@ -536,7 +579,7 @@ export function startStreamingRecording(opts: {
             stopping = true
 
             const waitForClose = new Promise<void>((resolve) => {
-                chunkCloseResolver = resolve
+                processCloseResolver = resolve
                 setTimeout(resolve, 2500)
             })
             try { proc?.kill('SIGINT') } catch { /* ignore */ }

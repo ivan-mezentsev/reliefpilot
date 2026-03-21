@@ -108,25 +108,33 @@ function createFakeSpawn(delayMs = 20) {
         const fakeProc = em as unknown as ChildProcess
             ; (fakeProc as unknown as Record<string, unknown>).pid = 99999
 
-        // Natural close timer — cancelled if kill() is called first
-        const naturalTimer = setTimeout(() => em.emit('close', 0, null), delayMs)
+        const outputTarget = args[args.length - 1]
+        let segmentIndex = 0
+        let closed = false
+
+        const resolveSegmentPath = (pattern: string, index: number) => {
+            const padded = String(index).padStart(6, '0')
+            return pattern.replace(/%0\d+d/, padded).replace(/%d/, String(index))
+        }
+
+        const emitSegment = () => {
+            if (closed || !outputTarget) return
+            const outputFile = resolveSegmentPath(outputTarget, segmentIndex++)
+            fs.writeFileSync(outputFile, Buffer.alloc(2000, 0x42))
+        }
+
+        emitSegment()
+        const segmentTimer = setInterval(() => emitSegment(), delayMs)
 
         fakeProc.kill = () => {
-            // Cancel natural timer to prevent double-close
-            clearTimeout(naturalTimer)
-            // Simulate SIGINT — emit close soon
+            if (closed) return true
+            closed = true
+            clearInterval(segmentTimer)
             setTimeout(() => em.emit('close', 0, null), delayMs / 2)
             return true
         }
 
         procs.push(em)
-
-        // Find the output file (last arg) and write a fake WAV
-        const outputFile = args[args.length - 1]
-        if (outputFile) {
-            // Write >1000 bytes so transcribeAndEmit doesn't skip
-            fs.writeFileSync(outputFile, Buffer.alloc(2000, 0x42))
-        }
 
         return { proc: fakeProc, getStderr: () => '' }
     }
