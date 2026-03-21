@@ -118,7 +118,8 @@
       {
         "command": "reliefpilot.voiceInput",
         "key": "ctrl+shift+m",
-        "mac": "cmd+shift+m"
+        "mac": "cmd+shift+m",
+        "when": "activeWebviewPanelId == 'reliefpilot.askReport' || activeWebviewPanelId == 'reliefpilot.haltForFeedback'"
       }
     ],
     "configuration": {
