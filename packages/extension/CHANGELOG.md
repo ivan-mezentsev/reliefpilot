@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0 - 2026-03-21
+
+- feat: add voice input (speech-to-text) for ask_report and halt_for_feedback panels (#24, thanks @jackkru69)
+- feat(tests): implement custom test runner and event reporting
+
 ## 0.9.2 - 2026-03-07
 
 - docs(execute_command, get_terminal_output): update model descriptions
