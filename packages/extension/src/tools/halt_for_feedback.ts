@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import { env } from '../utils/env'
 import { haltForFeedbackController } from '../utils/haltForFeedbackController'
-import { startStreamingRecording, type StreamingRecordingSession } from '../utils/speechToText'
+import { createWebviewVoiceInputController } from '../utils/webviewVoiceInputController'
 
 let haltPanel: vscode.WebviewPanel | undefined
 
@@ -133,7 +133,7 @@ export async function openOrFocusHaltForFeedback(): Promise<void> {
 
       <div class="textarea-wrap">
         <textarea id="feedback" class="textarea" aria-label="Feedback" placeholder="Type feedback…"></textarea>
-        <button id="micBtn" class="btn secondary mic-btn" aria-label="Voice input" title="Voice input">
+        <button id="micBtn" class="btn secondary mic-btn voice-input__button" aria-label="Voice input" title="Voice input">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-7 8h2a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.93V21h-4v-3.07A7 7 0 0 1 5 11z"/>
           </svg>
@@ -229,13 +229,12 @@ export async function openOrFocusHaltForFeedback(): Promise<void> {
       try { textarea.focus(); } catch {}
     </script>
     <script nonce="${nonce}" src="${voiceInputUri}"></script>
-    <script nonce="${nonce}">initVoiceInput({ micBtn: document.getElementById('micBtn'), textarea: textarea, vscode: vscode });</script>
+    <script nonce="${nonce}">window.ReliefPilotVoiceInput.init({ micBtn: document.getElementById('micBtn'), textarea: textarea, vscode: vscode });</script>
   </body>
 </html>`
 
   const disposables: vscode.Disposable[] = []
-  let activeRecording: StreamingRecordingSession | undefined
-  let recordingSessionId = 0
+  const voiceController = createWebviewVoiceInputController({ panel })
 
   // If the global state is changed externally (e.g. a tool resets paused -> running),
   // keep the Halt for Feedback panel in sync by closing it when it is no longer paused.
@@ -249,6 +248,10 @@ export async function openOrFocusHaltForFeedback(): Promise<void> {
 
   disposables.push(
     panel.webview.onDidReceiveMessage((msg: any) => {
+      if (voiceController.handleMessage(msg)) {
+        return
+      }
+
       if (!msg || typeof msg !== 'object') return
       if (msg.type === 'draft') {
         const value = typeof msg.value === 'string' ? msg.value : ''
@@ -258,13 +261,13 @@ export async function openOrFocusHaltForFeedback(): Promise<void> {
         return
       }
       if (msg.type === 'resume') {
-        activeRecording?.cancel()
+        voiceController.dispose()
         haltForFeedbackController.resume()
         try { panel.dispose() } catch { /* ignore */ }
         return
       }
       if (msg.type === 'send') {
-        activeRecording?.cancel()
+        voiceController.dispose()
         const value = typeof msg.value === 'string' ? msg.value : ''
         const trimmed = value.trim()
         if (trimmed.length === 0) {
@@ -274,42 +277,13 @@ export async function openOrFocusHaltForFeedback(): Promise<void> {
         try { panel.dispose() } catch { /* ignore */ }
         return
       }
-      if (msg.type === 'startRecording') {
-        activeRecording?.cancel()
-        const myId = ++recordingSessionId
-        const session = startStreamingRecording({
-          onText: (text: string) => {
-            if (recordingSessionId !== myId) return
-            void panel.webview.postMessage({ type: 'speechResult', text })
-          },
-          onEnd: () => {
-            if (recordingSessionId !== myId) return
-            activeRecording = undefined
-            void panel.webview.postMessage({ type: 'speechEnded' })
-          },
-          onError: (err: Error) => {
-            if (recordingSessionId !== myId) return
-            activeRecording = undefined
-            void vscode.window.showErrorMessage(`Voice error: ${err?.message || 'unknown'}`)
-            void panel.webview.postMessage({ type: 'speechError' })
-          },
-        })
-        activeRecording = session
-        return
-      }
-      if (msg.type === 'stopRecording') {
-        const rec = activeRecording
-        activeRecording = undefined
-        rec?.stop()
-        return
-      }
     }),
   )
 
   disposables.push(
     panel.onDidDispose(() => {
       haltPanel = undefined
-      activeRecording?.cancel()
+      voiceController.dispose()
 
       // If user closed the panel while still paused (Esc / X), resume.
       if (haltForFeedbackController.isPaused()) {

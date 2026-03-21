@@ -1,54 +1,121 @@
-// Shared voice input logic for webview panels.
-// Usage: initVoiceInput({ micBtn, textarea, vscode })
-// eslint-disable-next-line no-unused-vars
-function initVoiceInput(opts) {
-  var micBtn = opts.micBtn;
-  var textarea = opts.textarea;
-  var vscode = opts.vscode;
-  if (!micBtn || !textarea) return;
+(function () {
+  var GLOBAL_KEY = 'ReliefPilotVoiceInput';
+  if (window[GLOBAL_KEY]) {
+    return;
+  }
 
-  // Inject recording-state styles
-  var s = document.createElement('style');
-  s.textContent =
-    '.mic-recording{color:#e74c3c!important;opacity:1!important;animation:mic-pulse 1s ease-in-out infinite}' +
-    '.mic-processing{color:#f39c12!important;opacity:1!important;animation:mic-pulse 0.5s ease-in-out infinite}' +
-    '@keyframes mic-pulse{0%,100%{opacity:1}50%{opacity:0.35}}';
-  document.head.appendChild(s);
+  var STATES = {
+    idle: 'idle',
+    recording: 'recording',
+    processing: 'processing',
+  };
 
-  var isRecording = false;
+  function appendTranscription(textarea, text) {
+    var current = textarea.value || '';
+    textarea.value = current + (current && !current.endsWith(' ') ? ' ' : '') + text;
+    textarea.dispatchEvent(new Event('input'));
+  }
 
-  micBtn.addEventListener('click', function () {
-    if (isRecording) {
-      vscode.postMessage({ type: 'stopRecording' });
-      isRecording = false;
-      micBtn.classList.remove('mic-recording');
-      micBtn.classList.add('mic-processing');
-      micBtn.setAttribute('aria-label', 'Transcribing...');
-    } else {
+  function createController(opts) {
+    var micBtn = opts.micBtn;
+    var textarea = opts.textarea;
+    var vscode = opts.vscode;
+    if (!micBtn || !textarea || !vscode) {
+      return;
+    }
+
+    if (micBtn.dataset.reliefPilotVoiceInputBound === 'true') {
+      return;
+    }
+    micBtn.dataset.reliefPilotVoiceInputBound = 'true';
+
+    var state = STATES.idle;
+
+    function renderState() {
+      micBtn.classList.remove('voice-input__button--recording', 'voice-input__button--processing');
+      micBtn.removeAttribute('disabled');
+
+      if (state === STATES.recording) {
+        micBtn.classList.add('voice-input__button--recording');
+        micBtn.setAttribute('aria-label', 'Stop recording');
+        micBtn.setAttribute('title', 'Stop recording');
+        return;
+      }
+
+      if (state === STATES.processing) {
+        micBtn.classList.add('voice-input__button--processing');
+        micBtn.setAttribute('aria-label', 'Transcribing...');
+        micBtn.setAttribute('title', 'Transcribing...');
+        return;
+      }
+
+      micBtn.setAttribute('aria-label', 'Voice input');
+      micBtn.setAttribute('title', 'Voice input');
+    }
+
+    function startRecording() {
+      if (state !== STATES.idle) {
+        return;
+      }
+
+      state = STATES.recording;
+      renderState();
       vscode.postMessage({ type: 'startRecording' });
-      isRecording = true;
-      micBtn.classList.add('mic-recording');
-      micBtn.setAttribute('aria-label', 'Stop recording');
     }
-  });
 
-  window.addEventListener('message', function (event) {
-    var msg = event.data;
-    if (!msg || typeof msg !== 'object') return;
-    if (msg.type === 'speechResult' && typeof msg.text === 'string' && msg.text) {
-      var cur = textarea.value;
-      textarea.value = cur + (cur && !cur.endsWith(' ') ? ' ' : '') + msg.text;
-      textarea.dispatchEvent(new Event('input'));
-    } else if (msg.type === 'speechEnded') {
-      micBtn.classList.remove('mic-processing', 'mic-recording');
-      micBtn.setAttribute('aria-label', 'Voice input');
-      isRecording = false;
-    } else if (msg.type === 'speechError') {
-      micBtn.classList.remove('mic-processing', 'mic-recording');
-      micBtn.setAttribute('aria-label', 'Voice input');
-      isRecording = false;
-    } else if (msg.type === 'toggleRecording') {
-      micBtn.click();
+    function stopRecording() {
+      if (state !== STATES.recording) {
+        return;
+      }
+
+      state = STATES.processing;
+      renderState();
+      vscode.postMessage({ type: 'stopRecording' });
     }
-  });
-}
+
+    function toggleRecording() {
+      if (state === STATES.idle) {
+        startRecording();
+        return;
+      }
+
+      if (state === STATES.recording) {
+        stopRecording();
+      }
+    }
+
+    function reset() {
+      state = STATES.idle;
+      renderState();
+    }
+
+    micBtn.addEventListener('click', function () {
+      toggleRecording();
+    });
+
+    window.addEventListener('message', function (event) {
+      var msg = event.data;
+      if (!msg || typeof msg !== 'object') return;
+
+      if (msg.type === 'speechResult' && typeof msg.text === 'string' && msg.text) {
+        appendTranscription(textarea, msg.text);
+        return;
+      }
+
+      if (msg.type === 'speechEnded' || msg.type === 'speechError') {
+        reset();
+        return;
+      }
+
+      if (msg.type === 'toggleRecording') {
+        toggleRecording();
+      }
+    });
+
+    renderState();
+  }
+
+  window[GLOBAL_KEY] = {
+    init: createController,
+  };
+})();

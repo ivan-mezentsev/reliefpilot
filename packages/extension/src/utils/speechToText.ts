@@ -188,18 +188,11 @@ export async function transcribeAudio(audioBuffer: Buffer, signal?: AbortSignal)
     if (!resp.ok) {
         const errText = await resp.text().catch(() => '')
 
-        // Auto-downgrade verbose_json → json when the endpoint rejects the format
         if (responseFormat === 'verbose_json' && errText.includes('response_format')) {
-            const config = vscode.workspace.getConfiguration()
-            await config.update('reliefpilot.speechResponseFormat', 'json', vscode.ConfigurationTarget.Global)
-            vscode.window.showInformationMessage('Endpoint does not support verbose_json — switched to json format automatically.')
-
-            const retryResp = await sendTranscriptionRequest(audioBuffer, { apiKey, endpointBase, model, language, responseFormat: 'json', signal })
-            if (!retryResp.ok) {
-                const retryErr = await retryResp.text().catch(() => '')
-                throw new Error(`Speech transcription error ${retryResp.status}: ${retryErr}`)
-            }
-            return parseTranscriptionResponse(retryResp)
+            throw new Error(
+                `Speech transcription error ${resp.status}: endpoint rejected response_format="verbose_json". `
+                + 'Set "reliefpilot.speechResponseFormat" to "json" for providers that do not support verbose_json.',
+            )
         }
 
         throw new Error(`Speech transcription error ${resp.status}: ${errText}`)
@@ -302,6 +295,7 @@ async function transcribeAndEmit(
 export function startStreamingRecording(opts: {
     onText: (text: string) => void
     onEnd: () => void
+    onCancel?: () => void
     onError: (err: Error) => void
     chunkSeconds?: number
     /** @internal test-only overrides */
@@ -315,8 +309,8 @@ export function startStreamingRecording(opts: {
 }): StreamingRecordingSession {
     const chunkSec = opts.chunkSeconds ?? 3
     const runtimePlatform = opts._test?.platform ?? process.platform
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reliefpilot-stream-'))
-    const prefix = path.basename(tmpDir)
+    let tmpDir: string | undefined
+    let prefix: string | undefined
     let proc: ChildProcess | undefined
     let cancelled = false
     let stopping = false
@@ -358,8 +352,28 @@ export function startStreamingRecording(opts: {
         }
     }
 
-    const chunkFile = (index: number) => path.join(tmpDir, `${prefix}-${String(index).padStart(6, '0')}.wav`)
-    const outputPattern = path.join(tmpDir, `${prefix}-%06d.wav`)
+    function ensureTempArtifacts() {
+        if (tmpDir && prefix) return
+
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reliefpilot-stream-'))
+        prefix = path.basename(tmpDir)
+    }
+
+    function getChunkFile(index: number) {
+        if (!tmpDir || !prefix) {
+            throw new Error('Streaming recording temp directory is not initialized.')
+        }
+
+        return path.join(tmpDir, `${prefix}-${String(index).padStart(6, '0')}.wav`)
+    }
+
+    function getOutputPattern() {
+        if (!tmpDir || !prefix) {
+            throw new Error('Streaming recording temp directory is not initialized.')
+        }
+
+        return path.join(tmpDir, `${prefix}-%06d.wav`)
+    }
 
     function canFallbackLinuxBackend(): boolean {
         if (runtimePlatform !== 'linux' || stopping) return false
@@ -368,8 +382,19 @@ export function startStreamingRecording(opts: {
     }
 
     function failRecording(err: Error) {
+        if (cancelled) return
         cleanup()
         opts.onError(err)
+    }
+
+    function cancelBeforeStart() {
+        cleanup()
+        if (opts.onCancel) {
+            opts.onCancel()
+            return
+        }
+
+        opts.onEnd()
     }
 
     function retryAfterFfmpegInstall(onRetry: () => void | Promise<void>) {
@@ -437,12 +462,12 @@ export function startStreamingRecording(opts: {
 
     function flushReadyChunks(final = false) {
         while (true) {
-            const current = chunkFile(nextChunkIndex)
+            const current = getChunkFile(nextChunkIndex)
             if (!fs.existsSync(current)) {
                 return
             }
 
-            const next = chunkFile(nextChunkIndex + 1)
+            const next = getChunkFile(nextChunkIndex + 1)
             if (!final && !fs.existsSync(next)) {
                 return
             }
@@ -471,12 +496,14 @@ export function startStreamingRecording(opts: {
     function startContinuousRecording() {
         if (cancelled || stopping) return
 
+        ensureTempArtifacts()
+
         const backends = getLinuxBackends()
         const linuxBackend = runtimePlatform === 'linux'
             ? (backends[linuxBackendIdx] ?? backends[0] ?? 'pulse')
             : undefined
 
-        const ffmpegArgs = buildStreamingFfmpegArgs({ outputPattern, chunkSeconds: chunkSec, linuxBackend, windowsDevice: resolvedWindowsDevice, macDevice: resolvedMacDevice })
+        const ffmpegArgs = buildStreamingFfmpegArgs({ outputPattern: getOutputPattern(), chunkSeconds: chunkSec, linuxBackend, windowsDevice: resolvedWindowsDevice, macDevice: resolvedMacDevice })
         const started = (opts._test?.spawnFfmpeg ?? spawnFfmpeg)(ffmpegArgs)
         proc = started.proc
         stderrGetter = started.getStderr
@@ -537,73 +564,83 @@ export function startStreamingRecording(opts: {
     }
 
     function removeTempArtifacts() {
+        if (!tmpDir) return
+
         try {
-            for (const file of fs.readdirSync(tmpDir)) {
-                if (file.endsWith('.wav')) {
-                    try { fs.unlinkSync(path.join(tmpDir, file)) } catch { /* ignore */ }
-                }
-            }
-        } catch { /* ignore */ }
-        try { fs.rmdirSync(tmpDir) } catch { /* ignore — may not be empty */ }
+            fs.rmSync(tmpDir, { recursive: true, force: true })
+        } catch {
+            // ignore cleanup errors
+        }
+
+        tmpDir = undefined
+        prefix = undefined
     }
 
     // Resolve platform-specific device once before starting chunks
     void (async () => {
-        // Prompt for API key on first use (user can skip by leaving empty)
-        if (!opts._test) {
-            const proceed = await ensureSpeechApiKeyPrompted()
-            if (!proceed) {
-                opts.onEnd()
-                return
-            }
-        }
-
-        if (runtimePlatform === 'win32') {
-            const configured = getWindowsDevice()
-            if (configured) {
-                resolvedWindowsDevice = configured
-            } else {
-                const discovery = await (opts._test?.discoverWindowsAudioDevices ?? discoverWindowsAudioDevicesDetailed)()
-                if (discovery.ffmpegMissing) {
-                    retryAfterFfmpegInstall(async () => {
-                        const retryDiscovery = await (opts._test?.discoverWindowsAudioDevices ?? discoverWindowsAudioDevicesDetailed)()
-                        if (retryDiscovery.ffmpegMissing) {
-                            failRecording(new Error('FFmpeg is still not found after retry.'))
-                            return
-                        }
-
-                        resolvedWindowsDevice = retryDiscovery.devices[0]
-                        if (!resolvedWindowsDevice) {
-                            opts.onError(new Error(
-                                'No DirectShow audio input device found. Install a microphone driver or set "reliefpilot.speechWindowsDevice" in settings.',
-                            ))
-                            return
-                        }
-
-                        startContinuousRecording()
-                    })
-                    return
-                }
-
-                resolvedWindowsDevice = discovery.devices[0]
-                if (!resolvedWindowsDevice) {
-                    opts.onError(new Error(
-                        'No DirectShow audio input device found. Install a microphone driver or set "reliefpilot.speechWindowsDevice" in settings.',
-                    ))
+        try {
+            // Prompt for API key on first use (user can skip by leaving empty)
+            if (!opts._test) {
+                const proceed = await ensureSpeechApiKeyPrompted()
+                if (!proceed) {
+                    cancelBeforeStart()
                     return
                 }
             }
-        } else if (runtimePlatform === 'darwin') {
-            const configured = getMacDevice()
-            if (configured) {
-                resolvedMacDevice = configured
-            } else {
-                const devices = await discoverMacAudioDevices()
-                resolvedMacDevice = devices.length > 0 ? `:${devices[0].index}` : undefined
-                // macOS falls back to :default if no device discovered
+
+            if (cancelled || stopping) return
+
+            if (runtimePlatform === 'win32') {
+                const configured = getWindowsDevice()
+                if (configured) {
+                    resolvedWindowsDevice = configured
+                } else {
+                    const discovery = await (opts._test?.discoverWindowsAudioDevices ?? discoverWindowsAudioDevicesDetailed)()
+                    if (discovery.ffmpegMissing) {
+                        retryAfterFfmpegInstall(async () => {
+                            const retryDiscovery = await (opts._test?.discoverWindowsAudioDevices ?? discoverWindowsAudioDevicesDetailed)()
+                            if (retryDiscovery.ffmpegMissing) {
+                                failRecording(new Error('FFmpeg is still not found after retry.'))
+                                return
+                            }
+
+                            resolvedWindowsDevice = retryDiscovery.devices[0]
+                            if (!resolvedWindowsDevice) {
+                                failRecording(new Error(
+                                    'No DirectShow audio input device found. Install a microphone driver or set "reliefpilot.speechWindowsDevice" in settings.',
+                                ))
+                                return
+                            }
+
+                            startContinuousRecording()
+                        })
+                        return
+                    }
+
+                    resolvedWindowsDevice = discovery.devices[0]
+                    if (!resolvedWindowsDevice) {
+                        failRecording(new Error(
+                            'No DirectShow audio input device found. Install a microphone driver or set "reliefpilot.speechWindowsDevice" in settings.',
+                        ))
+                        return
+                    }
+                }
+            } else if (runtimePlatform === 'darwin') {
+                const configured = getMacDevice()
+                if (configured) {
+                    resolvedMacDevice = configured
+                } else {
+                    const devices = await discoverMacAudioDevices()
+                    resolvedMacDevice = devices.length > 0 ? `:${devices[0].index}` : undefined
+                    // macOS falls back to :default if no device discovered
+                }
             }
+
+            if (cancelled || stopping) return
+            startContinuousRecording()
+        } catch (err) {
+            failRecording(err instanceof Error ? err : new Error(String(err)))
         }
-        startContinuousRecording()
     })()
 
     return {
