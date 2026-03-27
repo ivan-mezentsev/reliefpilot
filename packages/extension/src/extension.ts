@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
+import { TelegramBotService } from './integrations/telegram/telegramBotService';
 import { CREATE_SPECS_MODE_COMMAND, registerSpecsModeCommand } from './specsMode';
 import { AiFetchUrlLanguageModelTool } from './tools/ai_fetch_url';
-import { AskReportLanguageModelTool, openOrFocusAskReportById } from './tools/ask_report';
+import { AskReportLanguageModelTool, onAskReportCreated, openOrFocusAskReportById } from './tools/ask_report';
 import { CodeCheckerLanguageModelTool } from './tools/code_checker';
 import { Context7GetLibraryDocsTool } from './tools/context7_get_library_docs';
 import { Context7ResolveLibraryIdTool } from './tools/context7_resolve_library_id';
@@ -52,6 +53,7 @@ import { initLinkupSessionStorage, registerLinkupSessionConfigWatcher } from './
 import { hasSpeechApiKey, initSpeechAuth, setupOrUpdateSpeechApiKey } from './utils/speech_auth';
 import { selectInputDevice } from './utils/speechToText';
 import { statusBarActivity } from './utils/statusBar';
+import { hasTelegramBotToken, initTelegramAuth, setupOrUpdateTelegramBotToken } from './utils/telegram_auth';
 import { toggleActiveVoiceInput } from './utils/voiceInputCommand';
 
 // Guard to ensure language model tools are registered only once per extension host process.
@@ -317,6 +319,12 @@ const extensionDisplayName = 'Relief Pilot';
 // Relief Pilot status bar item (always visible)
 let serverStatusBarItem: vscode.StatusBarItem;
 
+// Telegram Bot status bar item
+let telegramStatusBarItem: vscode.StatusBarItem;
+
+// Telegram Bot service singleton
+let telegramBotService: TelegramBotService | undefined;
+
 // Static Relief Pilot status bar rendering
 function showServerStatusBar() {
   if (!serverStatusBarItem) {
@@ -327,6 +335,41 @@ function showServerStatusBar() {
   // Clicking the status bar opens Relief Pilot menu
   serverStatusBarItem.command = STATUS_MENU_COMMAND;
   serverStatusBarItem.show();
+}
+
+function updateTelegramStatusBar(status: string) {
+  if (!telegramStatusBarItem) return;
+
+  switch (status) {
+    case 'connected':
+      telegramStatusBarItem.text = '$(check) TG';
+      telegramStatusBarItem.tooltip = 'Telegram Bot: Connected';
+      telegramStatusBarItem.backgroundColor = undefined;
+      break;
+    case 'starting':
+      telegramStatusBarItem.text = '$(sync~spin) TG';
+      telegramStatusBarItem.tooltip = 'Telegram Bot: Starting...';
+      telegramStatusBarItem.backgroundColor = undefined;
+      break;
+    case 'reconnecting':
+      telegramStatusBarItem.text = '$(sync~spin) TG';
+      telegramStatusBarItem.tooltip = 'Telegram Bot: Reconnecting...';
+      telegramStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+      break;
+    case 'error':
+      telegramStatusBarItem.text = '$(error) TG';
+      telegramStatusBarItem.tooltip = 'Telegram Bot: Error';
+      telegramStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+      break;
+    case 'stopped':
+    default:
+      telegramStatusBarItem.text = '$(circle-slash) TG';
+      telegramStatusBarItem.tooltip = 'Telegram Bot: Stopped';
+      telegramStatusBarItem.backgroundColor = undefined;
+      break;
+  }
+  telegramStatusBarItem.command = 'reliefpilot.telegramBot.toggle';
+  telegramStatusBarItem.show();
 }
 
 async function showReliefPilotMenu() {
@@ -342,6 +385,7 @@ async function showReliefPilotMenu() {
   const linkupApiKeyExists = await hasLinkupApiKey();
   const exaApiKeyExists = await hasExaApiKey();
   const speechApiKeyExists = await hasSpeechApiKey();
+  const telegramBotTokenExists = await hasTelegramBotToken();
   const tokenMenuLabel = context7TokenExists
     ? 'Update API-token `context7`'
     : 'Setup API-token `context7`';
@@ -363,6 +407,12 @@ async function showReliefPilotMenu() {
   const speechApiKeyMenuLabel = speechApiKeyExists
     ? 'Update API-token `SPEECH_API_KEY`'
     : 'Setup API-token `SPEECH_API_KEY`';
+  const telegramBotTokenMenuLabel = telegramBotTokenExists
+    ? 'Update API-token `TELEGRAM_BOT_TOKEN`'
+    : 'Setup API-token `TELEGRAM_BOT_TOKEN`';
+
+  const telegramBotRunning = telegramBotService?.getState().status === 'connected';
+  const telegramToggleLabel = telegramBotRunning ? 'Stop Telegram Bot' : 'Start Telegram Bot';
 
   const items: vscode.QuickPickItem[] = [
     {
@@ -413,6 +463,14 @@ async function showReliefPilotMenu() {
       label: speechApiKeyMenuLabel,
       description: speechApiKeyExists ? 'Change stored Speech API token `SPEECH_API_KEY`' : 'Store a new Speech API token `SPEECH_API_KEY` securely',
     },
+    {
+      label: telegramBotTokenMenuLabel,
+      description: telegramBotTokenExists ? 'Change stored Telegram Bot token' : 'Store a new Telegram Bot token securely',
+    },
+    {
+      label: telegramToggleLabel,
+      description: telegramBotRunning ? 'Stop the running Telegram bot' : 'Start Telegram bot for remote control',
+    },
   ];
 
   const pick = await vscode.window.showQuickPick(items, {
@@ -450,6 +508,10 @@ async function showReliefPilotMenu() {
     await setupOrUpdateExaApiKey();
   } else if (pick.label === speechApiKeyMenuLabel) {
     await setupOrUpdateSpeechApiKey();
+  } else if (pick.label === telegramBotTokenMenuLabel) {
+    await setupOrUpdateTelegramBotToken();
+  } else if (pick.label === telegramToggleLabel) {
+    await vscode.commands.executeCommand('reliefpilot.telegramBot.toggle');
   }
 }
 
@@ -694,6 +756,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   initLinkupAuth(context);
   initExaAuth(context);
   initSpeechAuth(context);
+  initTelegramAuth(context);
   // Initialize ask_report history storage (load from workspace storage)
   initAskReportHistoryStorage(context);
   // Initialize session storage
@@ -745,6 +808,63 @@ export const activate = async (context: vscode.ExtensionContext) => {
   );
   registerSpecsModeCommand(context);
   showServerStatusBar();
+
+  // --- Telegram Bot ---
+  const telegramOutputChannel = vscode.window.createOutputChannel('Relief Pilot: Telegram Bot');
+  telegramBotService = new TelegramBotService(telegramOutputChannel);
+
+  // Telegram Bot status bar item (right of RP status bar)
+  telegramStatusBarItem = vscode.window.createStatusBarItem('reliefpilot.telegramStatus', vscode.StatusBarAlignment.Left, -101);
+  context.subscriptions.push(telegramStatusBarItem);
+  updateTelegramStatusBar('stopped');
+
+  telegramBotService.onStateChange((state) => {
+    updateTelegramStatusBar(state.status);
+  });
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('reliefpilot.telegramBot.start', async () => {
+      await telegramBotService?.start();
+    }),
+    vscode.commands.registerCommand('reliefpilot.telegramBot.stop', async () => {
+      await telegramBotService?.stop();
+    }),
+    vscode.commands.registerCommand('reliefpilot.telegramBot.toggle', async () => {
+      if (!telegramBotService) return;
+      const state = telegramBotService.getState();
+      if (state.status === 'connected' || state.status === 'starting' || state.status === 'reconnecting') {
+        await telegramBotService.stop();
+      } else {
+        await telegramBotService.start();
+      }
+    }),
+    vscode.commands.registerCommand('reliefpilot.telegram.setupToken', () => setupOrUpdateTelegramBotToken()),
+  );
+
+  // Auto-start Telegram bot if configured
+  const telegramConfig = vscode.workspace.getConfiguration('reliefpilot');
+  if (telegramConfig.get<boolean>('telegramBotAutoStart', false)) {
+    telegramBotService.start().catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      telegramOutputChannel.appendLine(`Auto-start failed: ${message}`);
+    });
+  }
+
+  // Subscribe to ask_report events for Telegram notifications
+  context.subscriptions.push(
+    onAskReportCreated((event) => {
+      if (!telegramBotService || telegramBotService.getState().status !== 'connected') return;
+      const bridge = telegramBotService.getMessageBridge();
+      if (!bridge) return;
+      const authorizedIds = vscode.workspace.getConfiguration('reliefpilot').get<number[]>('telegramAuthorizedUserIds', []);
+      for (const userId of authorizedIds) {
+        bridge.sendAskReportNotification(userId, event.id, event.topicName, event.message, event.predefinedOptions).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          telegramOutputChannel.appendLine(`Failed to send ask_report notification to ${userId}: ${msg}`);
+        });
+      }
+    }),
+  );
 
   // Command: open AI Fetch progress webview (shown from Markdown command link)
   context.subscriptions.push(
@@ -817,6 +937,11 @@ export const activate = async (context: vscode.ExtensionContext) => {
   outputChannel.appendLine(`${extensionDisplayName} activated.`);
 };
 
-export function deactivate() {
-  // Clean-up is managed by the disposables added in the activate method.
+export async function deactivate() {
+  // Gracefully stop Telegram bot
+  if (telegramBotService) {
+    await telegramBotService.stop();
+    telegramBotService.dispose();
+    telegramBotService = undefined;
+  }
 }

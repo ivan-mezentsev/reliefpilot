@@ -7,3 +7,7 @@ dist
 node_modules
 out
 tsconfig.tsbuildinfo
+specs
+.specify
+.github/agents
+.github/prompts

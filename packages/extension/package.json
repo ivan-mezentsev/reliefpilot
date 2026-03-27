@@ -112,6 +112,21 @@
         "command": "reliefpilot.speech.selectInputDevice",
         "title": "Relief Pilot: Select Speech Input Device",
         "category": "Relief Pilot"
+      },
+      {
+        "command": "reliefpilot.telegramBot.start",
+        "title": "Relief Pilot: Start Telegram Bot",
+        "category": "Relief Pilot"
+      },
+      {
+        "command": "reliefpilot.telegramBot.stop",
+        "title": "Relief Pilot: Stop Telegram Bot",
+        "category": "Relief Pilot"
+      },
+      {
+        "command": "reliefpilot.telegramBot.toggle",
+        "title": "Relief Pilot: Toggle Telegram Bot",
+        "category": "Relief Pilot"
       }
     ],
     "keybindings": [
@@ -264,6 +279,19 @@
           "type": "string",
           "default": "",
           "description": "Language hint for speech-to-text transcription (e.g. 'en', 'ru', 'de'). Empty = auto-detect."
+        },
+        "reliefpilot.telegramBotAutoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically start Telegram bot when VS Code starts."
+        },
+        "reliefpilot.telegramAuthorizedUserIds": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "description": "List of authorized Telegram user IDs that can control Relief via the bot."
         }
       }
     },
@@ -1251,6 +1279,7 @@
   },
   "dependencies": {
     "@nanocollective/get-md": "^1.0.1",
+    "grammy": "^1.35.0",
     "esbuild": "^0.25.12",
     "highlight.js": "^11.10.0",
     "isbinaryfile": "^5.0.6",

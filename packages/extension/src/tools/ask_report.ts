@@ -13,6 +13,15 @@ import { haltForFeedbackController } from '../utils/haltForFeedbackController'
 import { statusBarActivity } from '../utils/statusBar'
 import { createWebviewVoiceInputController } from '../utils/webviewVoiceInputController'
 
+// Event emitter for Telegram integration: fires when a new ask_report is created
+const _onAskReportCreated = new vscode.EventEmitter<{
+    id: string
+    topicName: string
+    message: string
+    predefinedOptions?: string[]
+}>()
+export const onAskReportCreated = _onAskReportCreated.event
+
 export type AskReportOptions = {
     title?: string
     markdown: string
@@ -656,9 +665,9 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
 
         </script>
     ${voiceInputEnabled && voiceInputUri
-        ? `<script nonce="${nonce}" src="${voiceInputUri}"></script>
+            ? `<script nonce="${nonce}" src="${voiceInputUri}"></script>
     <script nonce="${nonce}">window.ReliefPilotVoiceInput.init({ micBtn: document.getElementById('micBtn'), textarea: el.textarea, vscode: vscode });</script>`
-        : ''}
+            : ''}
     </body>
 </html>`
 
@@ -813,6 +822,14 @@ export class AskReportLanguageModelTool
                     result: undefined,
                 })
             } catch { }
+
+            // Notify Telegram integration (if active)
+            _onAskReportCreated.fire({
+                id: uid,
+                topicName: input.topicName,
+                message: input.message,
+                predefinedOptions: Array.isArray(input.predefinedOptions) ? input.predefinedOptions : undefined,
+            })
 
             const result = await askReport({
                 title: input.topicName,
