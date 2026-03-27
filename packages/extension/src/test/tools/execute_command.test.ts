@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ExecuteCommandTool } from '../../tools/execute_command';
+import { GetTerminalOutputTool } from '../../tools/get_terminal_output';
 
 // Extend ExecuteCommandTool to override the ask method for testing
 class TestableExecuteCommandTool extends ExecuteCommandTool {
@@ -17,6 +18,22 @@ class TestableExecuteCommandTool extends ExecuteCommandTool {
     // Always approve during tests; mirror the tool's ApprovalDecision shape
     return { approved: true, updatedCommand: _command };
   }
+}
+
+async function waitForTerminalOutput(tid: number, pattern: RegExp, attempts = 12, delayMs = 250): Promise<string> {
+  const outTool = new GetTerminalOutputTool();
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const out = await outTool.execute(tid, 200);
+    if (pattern.test(out.text)) {
+      return out.text;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  const finalOut = await outTool.execute(tid, 200);
+  return finalOut.text;
 }
 
 suite('Execute Command Tool Test Suite', function () {
@@ -74,9 +91,8 @@ suite('Execute Command Tool Test Suite', function () {
       const idMatch = response.text.match(/terminal \(id: "?(\d+)"?\)/);
       assert.ok(idMatch, 'Response should include terminal ID');
       const tid = parseInt(idMatch[1], 10);
-      const outTool = new (require('../../tools/get_terminal_output').GetTerminalOutputTool)();
-      const out = await outTool.execute(tid, 100);
-      assert.match(out.text, /test content/, 'Terminal output should contain file content');
+      const output = await waitForTerminalOutput(tid, /test content/);
+      assert.match(output, /test content/, 'Terminal output should contain file content');
     } else {
       assert.match(response.text, /test content/, 'Output should contain file content');
     }
@@ -93,7 +109,7 @@ suite('Execute Command Tool Test Suite', function () {
     const testFile = vscode.Uri.file(path.join(subDir, 'subtest.txt'));
     await vscode.workspace.fs.writeFile(testFile, Buffer.from('subdir content\n', 'utf-8'));
 
-    const [userRejected, response] = await tool.execute('cat subtest.txt', 'subdir');
+    const [userRejected, response] = await tool.execute('cat subtest.txt', subDir);
     console.log('Subdirectory command test result:', response);
 
     assert.strictEqual(userRejected, false, 'Command should not be user rejected');
@@ -101,10 +117,8 @@ suite('Execute Command Tool Test Suite', function () {
       const idMatch = response.text.match(/terminal \(id: "?(\d+)"?\)/);
       assert.ok(idMatch, 'Response should include terminal ID');
       const tid = parseInt(idMatch[1], 10);
-      const outTool = new (require('../../tools/get_terminal_output').GetTerminalOutputTool)();
-      await new Promise(r => setTimeout(r, 300));
-      const out = await outTool.execute(tid, 100);
-      assert.match(out.text, /subdir content/, 'Terminal output should contain file content');
+      const output = await waitForTerminalOutput(tid, /subdir content/);
+      assert.match(output, /subdir content/, 'Terminal output should contain file content');
     } else {
       assert.match(response.text, /subdir content/, 'Output should contain file content');
     }
@@ -271,10 +285,8 @@ suite('Execute Command Tool Test Suite', function () {
       assert.ok(idMatch, 'Response should include terminal ID');
       if (!/show terminal ID/.test(response.text)) {
         const tid = parseInt(idMatch[1], 10);
-        const outTool = new (require('../../tools/get_terminal_output').GetTerminalOutputTool)();
-        await new Promise(r => setTimeout(r, 300));
-        const out = await outTool.execute(tid, 100);
-        assert.match(out.text, /show terminal ID/, 'Terminal output should contain command result');
+        const output = await waitForTerminalOutput(tid, /show terminal ID/);
+        assert.match(output, /show terminal ID/, 'Terminal output should contain command result');
       } else {
         assert.match(response.text, /show terminal ID/, 'Output should contain command result');
       }

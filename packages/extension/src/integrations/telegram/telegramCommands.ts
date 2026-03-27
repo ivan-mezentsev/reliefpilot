@@ -1,10 +1,11 @@
 import type { Bot } from 'grammy'
 import { InlineKeyboard } from 'grammy'
+import { parseTelegramActionCallback } from './messageBridge'
 import { bindOwner, createAuthMiddleware, hasOwner, isAuthorized } from './telegramAuth'
 import type { TelegramBotService } from './telegramBotService'
 
 export function registerCommands(bot: Bot, botService: TelegramBotService): void {
-  // /start — available to everyone (for owner binding), but with special handling
+  // /start — available to everyone (for owner binding), but with special handling.
   bot.command('start', async (ctx) => {
     const userId = ctx.from?.id
     if (!userId) return
@@ -21,13 +22,13 @@ export function registerCommands(bot: Bot, botService: TelegramBotService): void
     }
 
     if (isAuthorized(userId)) {
-      await ctx.reply('Relief Pilot Bot is ready. Send me a message to control Relief remotely.')
+      await ctx.reply('Relief Pilot Bot is ready. Send text, voice, or document messages to control Relief remotely.')
     } else {
       await ctx.reply('Unauthorized. Contact the bot owner.')
     }
   })
 
-  // Handle owner binding callback
+  // Handle owner binding callback.
   bot.on('callback_query:data', async (ctx, next) => {
     const data = ctx.callbackQuery.data
     if (!data.startsWith('bind_owner:')) {
@@ -52,9 +53,33 @@ export function registerCommands(bot: Bot, botService: TelegramBotService): void
     await ctx.editMessageText(`Owner bound: Telegram ID \`${userId}\`. Relief Pilot Bot is ready.`)
   })
 
+  // Handle approval and voice-related callback actions.
+  bot.on('callback_query:data', async (ctx, next) => {
+    const data = ctx.callbackQuery.data
+    const action = parseTelegramActionCallback(data)
+    if (!action) {
+      await next()
+      return
+    }
+
+    const userId = ctx.from?.id
+    if (!userId || !isAuthorized(userId)) {
+      await ctx.answerCallbackQuery({ text: 'Unauthorized.' })
+      return
+    }
+
+    const bridge = botService.getMessageBridge()
+    if (!bridge) {
+      await ctx.answerCallbackQuery({ text: 'Telegram bridge unavailable.' })
+      return
+    }
+
+    await bridge.handleActionCallback(ctx, data)
+  })
+
   const authMiddleware = createAuthMiddleware()
 
-  // /status — authorized users only
+  // /status — authorized users only.
   bot.command('status', authMiddleware, async (ctx) => {
     const state = botService.getState()
     const uptime = state.connectedAt
@@ -69,14 +94,16 @@ export function registerCommands(bot: Bot, botService: TelegramBotService): void
     )
   })
 
-  // /help — authorized users only
+  // /help — authorized users only.
   bot.command('help', authMiddleware, async (ctx) => {
     await ctx.reply(
       'Available commands:\n' +
       '/start - Initialize bot\n' +
       '/status - Check bot and Relief status\n' +
       '/help - Show this help\n\n' +
-      'Send any text message to execute it as a Relief command.',
+      'Send text to forward a prompt to Relief.\n' +
+      'Send a voice message to transcribe it before forwarding.\n' +
+      'Send a document to stage it for Relief workflows.',
     )
   })
 }

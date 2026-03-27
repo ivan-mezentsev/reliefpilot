@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { ApprovalCoordinator } from './integrations/telegram/approvalCoordinator';
+import { TelegramMediaStore } from './integrations/telegram/mediaStore';
 import { TelegramBotService } from './integrations/telegram/telegramBotService';
 import { CREATE_SPECS_MODE_COMMAND, registerSpecsModeCommand } from './specsMode';
 import { AiFetchUrlLanguageModelTool } from './tools/ai_fetch_url';
@@ -8,7 +10,7 @@ import { Context7GetLibraryDocsTool } from './tools/context7_get_library_docs';
 import { Context7ResolveLibraryIdTool } from './tools/context7_resolve_library_id';
 import { DuckDuckGoSearchTool } from './tools/duckduckgo_search';
 import { ExaSearchTool } from './tools/exa_search';
-import { ExecuteCommandLanguageModelTool } from './tools/execute_command';
+import { configureExecuteCommandApprovals, ExecuteCommandLanguageModelTool } from './tools/execute_command';
 import { FeloSearchTool } from './tools/felo_search';
 import { FocusEditorLanguageModelTool } from './tools/focus_editor';
 import { GetTerminalOutputLanguageModelTool } from './tools/get_terminal_output';
@@ -413,6 +415,8 @@ async function showReliefPilotMenu() {
 
   const telegramBotRunning = telegramBotService?.getState().status === 'connected';
   const telegramToggleLabel = telegramBotRunning ? 'Stop Telegram Bot' : 'Start Telegram Bot';
+  const confirmationMode = vscode.workspace.getConfiguration('reliefpilot').get<string>('commandConfirmationMode', 'vscode');
+  const confirmationModeLabel = `Command confirmations: ${confirmationMode}`;
 
   const items: vscode.QuickPickItem[] = [
     {
@@ -422,6 +426,10 @@ async function showReliefPilotMenu() {
     {
       label: 'Relief Pilot Settings',
       description: 'Open VS Code Settings filtered by @reliefpilot',
+    },
+    {
+      label: confirmationModeLabel,
+      description: 'Open the command confirmation mode setting',
     },
     {
       label: SELECT_AI_FETCH_URL_MODEL_LABEL,
@@ -485,6 +493,13 @@ async function showReliefPilotMenu() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`Failed to open settings: ${message}`);
+    }
+  } else if (pick.label === confirmationModeLabel) {
+    try {
+      await vscode.commands.executeCommand('workbench.action.openSettings', 'reliefpilot.commandConfirmationMode');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to open command confirmation setting: ${message}`);
     }
   } else if (pick.label === 'Halt for Feedback') {
     await vscode.commands.executeCommand(HALT_FOR_FEEDBACK_COMMAND);
@@ -812,6 +827,12 @@ export const activate = async (context: vscode.ExtensionContext) => {
   // --- Telegram Bot ---
   const telegramOutputChannel = vscode.window.createOutputChannel('Relief Pilot: Telegram Bot');
   telegramBotService = new TelegramBotService(telegramOutputChannel);
+  const approvalCoordinator = new ApprovalCoordinator();
+  const telegramMediaStore = new TelegramMediaStore(telegramOutputChannel);
+  telegramBotService.setApprovalCoordinator(approvalCoordinator);
+  telegramBotService.setMediaStore(telegramMediaStore);
+  configureExecuteCommandApprovals({ approvalCoordinator, telegramBotService });
+  context.subscriptions.push(approvalCoordinator);
 
   // Telegram Bot status bar item (right of RP status bar)
   telegramStatusBarItem = vscode.window.createStatusBarItem('reliefpilot.telegramStatus', vscode.StatusBarAlignment.Left, -101);

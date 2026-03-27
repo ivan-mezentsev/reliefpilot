@@ -18,6 +18,27 @@ class TestableExecuteCommandTool extends ExecuteCommandTool {
   }
 }
 
+async function waitForTerminalOutput(
+  getOutputTool: GetTerminalOutputTool,
+  terminalId: number,
+  pattern: RegExp,
+  maxLines: number = 1000,
+  attempts = 12,
+  delayMs = 250,
+): Promise<string> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const response = await getOutputTool.execute(terminalId, maxLines);
+    if (pattern.test(response.text)) {
+      return response.text;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  const finalResponse = await getOutputTool.execute(terminalId, maxLines);
+  return finalResponse.text;
+}
+
 suite('Get Terminal Output Tool Test Suite', function () {
   this.timeout(15000); // Extended timeout for terminal operations
 
@@ -71,34 +92,33 @@ suite('Get Terminal Output Tool Test Suite', function () {
     assert.ok(testTerminalId, 'Terminal ID should be set from previous test');
 
     // Run a command with a specific output
-    await execTool.execute('echo "This is a specific test output"', undefined, false);
+    const marker = `specific-output-${Date.now()}`;
+    await execTool.execute(`echo "${marker}"`, undefined, false);
 
     // Get output from the terminal
-    const response = await getOutputTool.execute(testTerminalId);
+    const output = await waitForTerminalOutput(getOutputTool, testTerminalId, new RegExp(marker));
 
     // Verify the output contains the expected content
-    assert.match(response.text, /This is a specific test output/, 'Terminal output should contain the expected command output');
+    assert.match(output, new RegExp(marker), 'Terminal output should contain the expected command output');
   });
 
   test('Get output with line limit', async function () {
     this.retries(2);
+    const prefix = `LimitLine-${Date.now()}`;
     // Generate a lot of output lines
-    await execTool.execute('for i in {1..50}; do echo "Line $i"; done', undefined, false);
-
-    // Allow terminal buffer to settle
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await execTool.execute(`for i in $(seq 1 50); do echo "${prefix}-$i"; done`, undefined, false);
 
     // Get output with a limit of 10 lines
-    const response = await getOutputTool.execute(testTerminalId, 10);
+    const output = await waitForTerminalOutput(getOutputTool, testTerminalId, new RegExp(`${prefix}-50`), 10);
 
     // Count the number of lines in the response
-    const outputLines = response.text.split('\n');
+    const outputLines = output.split('\n');
 
     // The first few lines are the tool's response metadata, so we check if the total is less than a reasonable limit
     assert.ok(outputLines.length < 20, 'Output should be limited to around 10 lines plus metadata');
 
     // Verify we have the last lines of output
-    assert.match(response.text, /Line 4[0-9]|Line 50/, 'Output should contain the last lines');
+    assert.match(output, new RegExp(`${prefix}-(4[0-9]|50)`), 'Output should contain the last lines');
   });
 
   test('Get output from non-existent terminal', async function () {
@@ -110,8 +130,10 @@ suite('Get Terminal Output Tool Test Suite', function () {
   });
 
   test('Get output after background command', async function () {
+    const startMarker = `bg-start-${Date.now()}`;
+    const endMarker = `bg-end-${Date.now()}`;
     // Run a command in background mode
-    const [userRejected, cmdResponse] = await execTool.execute('echo "Background command test" && sleep 1 && echo "After delay"', undefined, false, true);
+    const [userRejected, cmdResponse] = await execTool.execute(`echo "${startMarker}" && sleep 1 && echo "${endMarker}"`, undefined, false, true);
 
     assert.strictEqual(userRejected, false, 'Command should not be user rejected');
     // New message wording: "Command started in background and continues in terminal ..."
@@ -124,14 +146,11 @@ suite('Get Terminal Output Tool Test Suite', function () {
       bgTerminalId = parseInt(match[1], 10);
     }
 
-    // Wait a bit for the command to complete
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
     // Get output after background command completed
-    const outputResponse = await getOutputTool.execute(bgTerminalId);
+    const output = await waitForTerminalOutput(getOutputTool, bgTerminalId, new RegExp(endMarker), 1000, 16, 250);
 
     // Verify we can see both parts of the output
-    assert.match(outputResponse.text, /Background command test/, 'Output should contain first part of command');
-    assert.match(outputResponse.text, /After delay/, 'Output should contain the delayed part of command');
+    assert.match(output, new RegExp(startMarker), 'Output should contain first part of command');
+    assert.match(output, new RegExp(endMarker), 'Output should contain the delayed part of command');
   });
 });

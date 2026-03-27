@@ -1,6 +1,9 @@
 import { Bot } from 'grammy'
 import * as vscode from 'vscode'
 import { getTelegramBotToken } from '../../utils/telegram_auth'
+import { ApprovalCoordinator } from './approvalCoordinator'
+import type { MediaTransfer } from './mediaStore'
+import { TelegramMediaStore } from './mediaStore'
 import { MessageBridge } from './messageBridge'
 import { registerCommands } from './telegramCommands'
 
@@ -13,17 +16,30 @@ export interface BotState {
   messageCount: number
 }
 
+/**
+ * Manages the grammY bot lifecycle and wires shared Telegram capabilities into
+ * the extension, including approval sync and media transfer helpers.
+ */
 export class TelegramBotService {
+  private static readonly STARTUP_TIMEOUT_MS = 10_000
+  private static readonly BACKOFF_INITIAL_MS = 1_000
+  private static readonly BACKOFF_MAX_MS = 30_000
+
   private bot: Bot | null = null
   private messageBridge: MessageBridge | null = null
+  private approvalCoordinator: ApprovalCoordinator | null = null
+  private mediaStore: TelegramMediaStore | null = null
+  private approvalResolutionSubscription: vscode.Disposable | null = null
+  private startupWatchdog: ReturnType<typeof setTimeout> | null = null
   private state: BotState = {
     status: 'stopped',
     lastError: null,
     connectedAt: null,
     messageCount: 0,
   }
-  private reconnectAttempt = 0
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private running = false
+  private backoffDelay = TelegramBotService.BACKOFF_INITIAL_MS
+  private restartRequested = false
   private outputChannel: vscode.OutputChannel
 
   private readonly _onStateChange = new vscode.EventEmitter<BotState>()
@@ -31,6 +47,32 @@ export class TelegramBotService {
 
   constructor(outputChannel: vscode.OutputChannel) {
     this.outputChannel = outputChannel
+  }
+
+  public setApprovalCoordinator(approvalCoordinator: ApprovalCoordinator): void {
+    this.approvalCoordinator = approvalCoordinator
+    this.wireBridgeDependencies()
+  }
+
+  public getApprovalCoordinator(): ApprovalCoordinator | null {
+    return this.approvalCoordinator
+  }
+
+  public setMediaStore(mediaStore: TelegramMediaStore): void {
+    this.mediaStore = mediaStore
+    this.wireBridgeDependencies()
+  }
+
+  public getMediaStore(): TelegramMediaStore | null {
+    return this.mediaStore
+  }
+
+  public getAuthorizedUserIds(): number[] {
+    return vscode.workspace.getConfiguration('reliefpilot').get<number[]>('telegramAuthorizedUserIds', [])
+  }
+
+  public isConnected(): boolean {
+    return this.state.status === 'connected'
   }
 
   public getState(): BotState {
@@ -49,13 +91,21 @@ export class TelegramBotService {
     this.state.messageCount++
   }
 
+  public async deliverFileToAuthorizedUsers(filePath: string, caption: string, userIds?: number[]): Promise<MediaTransfer[]> {
+    if (!this.messageBridge) {
+      throw new Error('Telegram bot is not connected.')
+    }
+
+    return this.messageBridge.deliverFileToAuthorizedUsers(filePath, caption, userIds)
+  }
+
   private setState(patch: Partial<BotState>): void {
     Object.assign(this.state, patch)
     this._onStateChange.fire(this.getState())
   }
 
   public async start(): Promise<void> {
-    if (this.state.status === 'connected' || this.state.status === 'starting') {
+    if (this.running || this.state.status === 'connected' || this.state.status === 'starting') {
       this.outputChannel.appendLine('Telegram bot is already running or starting.')
       return
     }
@@ -66,24 +116,27 @@ export class TelegramBotService {
       return
     }
 
-    this.setState({ status: 'starting', lastError: null })
-    this.outputChannel.appendLine('Starting Telegram bot...')
-
     try {
+      this.running = true
+      this.backoffDelay = TelegramBotService.BACKOFF_INITIAL_MS
+      this.restartRequested = false
+      this.setState({ status: 'starting', lastError: null, connectedAt: null })
+      this.outputChannel.appendLine('Starting Telegram bot...')
       this.bot = new Bot(token)
       this.setupHandlers()
-      await this.startPolling()
+      void this.startPollingLoop()
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      this.outputChannel.appendLine(`Failed to start Telegram bot: ${message}`)
-      this.setState({ status: 'error', lastError: message })
-      this.scheduleReconnect()
+      this.running = false
+      this.handleBotFailure('start', err)
     }
   }
 
   public async stop(): Promise<void> {
-    this.clearReconnectTimer()
-    this.reconnectAttempt = 0
+    this.clearStartupWatchdog()
+    this.running = false
+    this.restartRequested = false
+    this.backoffDelay = TelegramBotService.BACKOFF_INITIAL_MS
+    this.disposeApprovalResolutionSubscription()
 
     if (this.messageBridge) {
       this.messageBridge.dispose()
@@ -110,89 +163,169 @@ export class TelegramBotService {
   private setupHandlers(): void {
     if (!this.bot) return
 
-    // Register bot commands (/start, /status, /help, owner binding)
+    // Register bot commands (/start, /status, /help, owner binding).
     registerCommands(this.bot, this)
 
-    // Register message bridge (text forwarding, ask_report callbacks)
+    // Register message bridge (text forwarding, ask_report callbacks, approvals, media flows).
     this.messageBridge = new MessageBridge(this.bot, this, this.outputChannel)
+    this.wireBridgeDependencies()
     this.messageBridge.registerHandlers()
 
     this.bot.catch((err) => {
-      const message = err.message ?? String(err)
-      this.outputChannel.appendLine(`Telegram bot error: ${message}`)
-
-      if (this.isNetworkError(err)) {
-        this.setState({ status: 'reconnecting', lastError: message })
-        this.scheduleReconnect()
-      } else {
-        this.setState({ lastError: message })
+      if (this.isRoutinePollingTimeout(err)) {
+        return
       }
+
+      const message = err.message ?? String(err)
+      this.outputChannel.appendLine(`Telegram bot runtime error: ${message}`)
+
+      if (!this.running || this.state.status === 'stopped') {
+        return
+      }
+
+      this.setState({ lastError: message })
     })
   }
 
-  private async startPolling(): Promise<void> {
-    if (!this.bot) return
+  private wireBridgeDependencies(): void {
+    // The bridge is created after the bot starts, so approval/media dependencies
+    // are wired lazily and re-wired across reconnects.
+    if (!this.messageBridge) {
+      return
+    }
 
-    // bot.start() runs the polling loop. It resolves when the initial
-    // getUpdates succeeds, then continues polling in the background.
-    this.bot.start({
-      onStart: () => {
-        this.reconnectAttempt = 0
-        this.setState({
-          status: 'connected',
-          connectedAt: new Date(),
-        })
-        this.outputChannel.appendLine('Telegram bot connected and polling.')
-      },
-    })
+    if (this.approvalCoordinator) {
+      this.messageBridge.setApprovalCoordinator(this.approvalCoordinator)
+      this.disposeApprovalResolutionSubscription()
+      this.approvalResolutionSubscription = this.approvalCoordinator.onResolved((event) => {
+        void this.messageBridge?.updateApprovalResolution(event.request, event.resolution)
+      })
+    }
+
+    if (this.mediaStore) {
+      this.messageBridge.setMediaStore(this.mediaStore)
+    }
   }
 
-  private scheduleReconnect(): void {
-    this.clearReconnectTimer()
+  private disposeApprovalResolutionSubscription(): void {
+    try {
+      this.approvalResolutionSubscription?.dispose()
+    } catch {
+      // ignore cleanup errors
+    }
+    this.approvalResolutionSubscription = null
+  }
 
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt), 30000)
-    this.reconnectAttempt++
-    this.outputChannel.appendLine(`Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempt})...`)
+  private async startPollingLoop(): Promise<void> {
+    while (this.running && this.bot) {
+      this.armStartupWatchdog()
 
-    this.reconnectTimer = setTimeout(async () => {
-      if (this.state.status === 'stopped') return
-      this.setState({ status: 'reconnecting' })
       try {
-        if (this.bot) {
-          try { await this.bot.stop() } catch { /* ignore */ }
-          this.bot = null
-        }
-        const token = await getTelegramBotToken()
-        if (!token) {
-          this.setState({ status: 'error', lastError: 'Token not configured' })
+        await this.bot.start({
+          onStart: (botInfo) => {
+            this.clearStartupWatchdog()
+            this.restartRequested = false
+            this.backoffDelay = TelegramBotService.BACKOFF_INITIAL_MS
+            this.setState({
+              status: 'connected',
+              connectedAt: new Date(),
+              lastError: null,
+            })
+            this.outputChannel.appendLine(`Telegram bot connected and polling as @${botInfo.username}.`)
+          },
+        })
+
+        this.clearStartupWatchdog()
+
+        if (!this.running) {
           return
         }
-        this.bot = new Bot(token)
-        this.setupHandlers()
-        await this.startPolling()
+
+        if (!this.restartRequested) {
+          return
+        }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        this.outputChannel.appendLine(`Reconnect failed: ${message}`)
-        this.setState({ status: 'error', lastError: message })
-        this.scheduleReconnect()
+        this.clearStartupWatchdog()
+
+        if (!this.running) {
+          return
+        }
+
+        this.handleBotFailure('polling', err)
       }
-    }, delay)
+
+      if (!this.running) {
+        return
+      }
+
+      const delay = this.backoffDelay
+      this.outputChannel.appendLine(`Reconnecting in ${delay / 1000}s...`)
+      await this.sleep(delay)
+      this.backoffDelay = Math.min(this.backoffDelay * 2, TelegramBotService.BACKOFF_MAX_MS)
+    }
   }
 
-  private clearReconnectTimer(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = null
+  private armStartupWatchdog(): void {
+    this.clearStartupWatchdog()
+
+    this.startupWatchdog = setTimeout(() => {
+      if (this.state.status !== 'starting' && this.state.status !== 'reconnecting') {
+        return
+      }
+
+      const message = `Telegram bot startup timed out after ${TelegramBotService.STARTUP_TIMEOUT_MS}ms while waiting for polling readiness.`
+      this.outputChannel.appendLine(message)
+      this.restartRequested = true
+      this.setState({ status: 'reconnecting', lastError: message })
+
+      void this.bot?.stop().catch(() => {
+        // ignore watchdog stop errors
+      })
+    }, TelegramBotService.STARTUP_TIMEOUT_MS)
+  }
+
+  private clearStartupWatchdog(): void {
+    if (this.startupWatchdog) {
+      clearTimeout(this.startupWatchdog)
+      this.startupWatchdog = null
     }
   }
 
   private isNetworkError(err: unknown): boolean {
     const message = err instanceof Error ? err.message : String(err)
-    return /network|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|fetch failed|429/i.test(message)
+    return /network|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|fetch failed|429|timed out|timeout|abort|aborted/i.test(message)
+  }
+
+  private isRoutinePollingTimeout(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err)
+    return /timeout/i.test(message)
+  }
+
+  private handleBotFailure(stage: 'start' | 'runtime' | 'polling' | 'reconnect', err: unknown): void {
+    const message = err instanceof Error ? err.message : String(err)
+    this.clearStartupWatchdog()
+    this.outputChannel.appendLine(`Telegram bot ${stage} error: ${message}`)
+
+    if (this.state.status === 'stopped') {
+      return
+    }
+
+    if (this.isNetworkError(err)) {
+      this.setState({ status: 'reconnecting', lastError: message })
+      this.restartRequested = true
+      return
+    }
+
+    this.setState({ status: 'error', lastError: message })
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   public dispose(): void {
+    this.disposeApprovalResolutionSubscription()
     this._onStateChange.dispose()
-    this.clearReconnectTimer()
+    this.clearStartupWatchdog()
   }
 }

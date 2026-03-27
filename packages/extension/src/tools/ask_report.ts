@@ -47,10 +47,36 @@ export type AskReportInput = {
     predefinedOptions?: string[]
 }
 
+export type ExternalAskReportResolution = {
+    decision: 'Submit' | 'Cancel'
+    value: string
+    source: 'telegram'
+}
+
+type PendingAskReportResolver = {
+    resolveExternally: (result: ExternalAskReportResolution) => boolean
+}
+
 let activeAskReportPanel: vscode.WebviewPanel | undefined
+const pendingAskReportResolvers = new Map<string, PendingAskReportResolver>()
 
 export function getActiveAskReportPanel(): vscode.WebviewPanel | undefined {
     return activeAskReportPanel
+}
+
+export function resolveAskReportFromTelegram(reportId: string, value: string): 'resolved' | 'not-found' | 'already-settled' {
+    const resolver = pendingAskReportResolvers.get(reportId)
+    if (!resolver) {
+        return 'not-found'
+    }
+
+    const resolved = resolver.resolveExternally({
+        decision: 'Submit',
+        value,
+        source: 'telegram',
+    })
+
+    return resolved ? 'resolved' : 'already-settled'
 }
 
 export async function askReport(opts: AskReportOptions): Promise<AskUserResult> {
@@ -684,10 +710,29 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         const finalize = (res: AskUserResult) => {
             if (!settled) {
                 settled = true
+                if (opts.historyId) {
+                    pendingAskReportResolvers.delete(opts.historyId)
+                }
                 voiceController.dispose()
                 try { panel.dispose() } catch { /* noop */ }
                 resolve(res)
             }
+        }
+
+        if (opts.historyId && !opts.readOnly) {
+            pendingAskReportResolvers.set(opts.historyId, {
+                resolveExternally: (result) => {
+                    if (settled) {
+                        return false
+                    }
+
+                    finalize({
+                        decision: result.decision,
+                        value: result.value,
+                    })
+                    return true
+                },
+            })
         }
 
         const disposables: vscode.Disposable[] = []
@@ -754,6 +799,9 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         disposables.push(
             panel.onDidDispose(() => {
                 voiceController.dispose()
+                if (opts.historyId) {
+                    pendingAskReportResolvers.delete(opts.historyId)
+                }
                 if (activeAskReportPanel === panel) activeAskReportPanel = undefined
                 if (opts.historyId) {
                     try {

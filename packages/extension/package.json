@@ -140,6 +140,27 @@
     "configuration": {
       "type": "object",
       "properties": {
+        "reliefpilot.commandConfirmationMode": {
+          "type": "string",
+          "default": "vscode",
+          "enum": [
+            "vscode",
+            "telegram",
+            "both",
+            "auto"
+          ],
+          "markdownDescription": "Controls how `execute_command` approvals are routed. `vscode` = local confirmation only, `telegram` = Telegram first with local fallback if unavailable, `both` = show both surfaces and accept the first response, `auto` = skip confirmation entirely."
+        },
+        "reliefpilot.telegramAskReportDeliveryMode": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "message",
+            "document"
+          ],
+          "markdownDescription": "Controls how `ask_report` is delivered to Telegram. `auto` = send short reports as a Telegram message and long reports as a Markdown file, `message` = always send a truncated Telegram message, `document` = always send a Markdown file attachment."
+        },
         "reliefpilot.confirmNonDestructiveCommands": {
           "type": "boolean",
           "default": false,
@@ -1263,7 +1284,8 @@
     "compile-tests": "node build.js --test",
     "pretest": "pnpm compile-tests",
     "test": "node scripts/run-vscode-tests.cjs",
-    "package": "pnpm check-types && node build.js --production"
+    "package": "pnpm check-types && node build.js --production",
+    "local-install": "pnpm run generate:icon && pnpm check-types && node build.js --production && cross-env npm_config_user_agent=pnpm vsce package --no-dependencies && code --install-extension reliefpilot-$(node -p \"require('./package.json').version\").vsix --force"
   },
   "devDependencies": {
     "@types/jsdom": "^27.0.0",

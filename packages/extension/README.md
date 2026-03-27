@@ -20,8 +20,35 @@ Can you check the docs and explain how the project works? #ask_report
 
 - Execute commands within VSCode's integrated terminal (supports background/foreground execution, on-the-fly command editing, and cancellation with feedback!).
 - You can tell the agent to stop asking you for permission! Just explicitly specify `"destructiveFlag": false` in your requests.
+- You can also control the approval surface globally with `reliefpilot.commandConfirmationMode`:
+  - `vscode` — show confirmation only inside VS Code
+  - `telegram` — route approvals to Telegram first, with local fallback if the bot is unavailable
+  - `both` — show both surfaces and accept the first response
+  - `auto` — skip confirmation entirely and log the auto-approved command for auditability
 
 ![execute_command](https://github.com/ivan-mezentsev/reliefpilot/raw/master/docs/demo-execute_command.gif)
+
+### Telegram Remote Control
+
+- Start the bot from the Command Palette with `Relief Pilot: Start Telegram Bot`.
+- Authorized Telegram users can:
+  - send text messages that are forwarded into Relief Pilot
+  - approve or deny pending `execute_command` requests remotely
+  - send voice messages, review the recognized text, and forward it only after confirmation
+  - upload documents that are staged for local Relief workflows
+  - receive outbound files back in Telegram when a workflow shares them
+
+**Telegram settings:**
+
+- `reliefpilot.telegramBotAutoStart` — automatically start the bot with VS Code
+- `reliefpilot.telegramAuthorizedUserIds` — list of Telegram user IDs allowed to control Relief Pilot
+- `reliefpilot.commandConfirmationMode` — approval routing mode for `execute_command`
+
+**Voice/file notes:**
+
+- Voice messages reuse the same speech-to-text pipeline as the local voice input flow.
+- Uploaded files are staged in a temporary workspace-scoped directory before your workflow consumes them.
+- Outbound delivery requires the Telegram bot to stay connected and the target file to still exist locally.
 
 ### Halt for Feedback
 
@@ -214,7 +241,6 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    ```
 
 4. Stock up on tokens — you'll need them for maximum comfort:
-
    - [context7.com/dashboard](https://context7.com/dashboard)
    - [Google API Key](https://support.google.com/googleapi/answer/6158862?hl=en) (free 100 req/day)
    - [Google Search Engine ID](https://support.google.com/programmable-search/answer/12499034?hl=en)

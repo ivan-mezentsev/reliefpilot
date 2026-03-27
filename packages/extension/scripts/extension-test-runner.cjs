@@ -6,6 +6,7 @@ module.exports = { run };
 
 async function run() {
   const eventsFile = process.env.RELIEFPILOT_TEST_EVENTS_FILE;
+  const grepPattern = process.env.RELIEFPILOT_TEST_GREP;
 
   if (!eventsFile) {
     throw new Error('RELIEFPILOT_TEST_EVENTS_FILE is required.');
@@ -18,6 +19,10 @@ async function run() {
     reporter,
     ui: 'tdd',
   });
+
+  if (grepPattern) {
+    mocha.grep(new RegExp(grepPattern));
+  }
 
   for (const file of collectTestFiles(testsRoot)) {
     mocha.addFile(file);
