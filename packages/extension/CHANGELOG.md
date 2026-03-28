@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 - 2026-03-28
+
+- docs: update examples in README for ripgrep usage
+- chore(extension): remove Google search integration (Google ended support for this API)
+
 ## 1.0.0 - 2026-03-21
 
 - feat: add voice input (speech-to-text) for ask_report and halt_for_feedback panels (#24, thanks @jackkru69)

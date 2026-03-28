@@ -3,7 +3,7 @@
   "displayName": "Relief Pilot",
   "description": "A Swiss Army knife for AI agents in VS Code: safer tool calling, human-in-the-loop approvals, and smarter doc fetching to boost productivity and save you money.",
   "publisher": "ivan-mezentsev",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "commonjs",
   "icon": "icon.png",
   "categories": [
@@ -180,13 +180,6 @@
           "minimum": 1,
           "maximum": 1000,
           "description": "Maximum number of github session history entries to keep."
-        },
-        "reliefpilot.googleHistoryMaxEntries": {
-          "type": "number",
-          "default": 20,
-          "minimum": 1,
-          "maximum": 1000,
-          "description": "Maximum number of google session history entries to keep."
         },
         "reliefpilot.linkupHistoryMaxEntries": {
           "type": "number",
@@ -981,70 +974,6 @@
             "owner",
             "repo",
             "issue_number"
-          ]
-        }
-      },
-      {
-        "name": "google_search",
-        "displayName": "Google: Search web",
-        "modelDescription": "Search Google and return relevant results from the web. This tool finds web pages, articles, and information on specific topics using Google's search engine. Results include titles, snippets, and URLs that can be analyzed further.",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "google_search",
-        "icon": "icon.png",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "query": {
-              "type": "string",
-              "description": "Search query - be specific and use quotes for exact matches. For best results, use clear keywords and avoid very long queries."
-            },
-            "num_results": {
-              "type": "integer",
-              "description": "Number of results to return (default: 5, max: 10). Increase for broader coverage, decrease for faster response.",
-              "default": 5,
-              "minimum": 1,
-              "maximum": 10
-            },
-            "site": {
-              "type": "string",
-              "description": "Limit search results to a specific website domain (e.g., 'wikipedia.org' or 'nytimes.com')."
-            },
-            "language": {
-              "type": "string",
-              "description": "Filter results by language using ISO 639-1 codes (e.g., 'en' for English, 'es' for Spanish, 'fr' for French)."
-            },
-            "dateRestrict": {
-              "type": "string",
-              "description": "Filter results by date using Google's date restriction format: 'd[number]' for past days, 'w[number]' for past weeks, 'm[number]' for past months, or 'y[number]' for past years. Example: 'm6' for results from the past 6 months."
-            },
-            "exactTerms": {
-              "type": "string",
-              "description": "Search for results that contain this exact phrase. This is equivalent to putting the terms in quotes in the search query."
-            },
-            "resultType": {
-              "type": "string",
-              "description": "Specify the type of results to return. Options include 'image' (or 'images'), 'news', and 'video' (or 'videos'). Default is general web results."
-            },
-            "page": {
-              "type": "integer",
-              "description": "Page number for paginated results (starts at 1). Use in combination with resultsPerPage to navigate through large result sets.",
-              "default": 1,
-              "minimum": 1
-            },
-            "resultsPerPage": {
-              "type": "integer",
-              "description": "Number of results to show per page (default: 5, max: 10). Controls how many results are returned for each page.",
-              "default": 5,
-              "minimum": 1,
-              "maximum": 10
-            },
-            "sort": {
-              "type": "string",
-              "description": "Sorting method for search results. Options: 'relevance' (default) or 'date' (most recent first)."
-            }
-          },
-          "required": [
-            "query"
           ]
         }
       },
