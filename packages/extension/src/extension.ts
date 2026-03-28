@@ -22,7 +22,6 @@ import { GithubPullRequestReadTool } from './tools/github_pull_request_read';
 import { GithubSearchCodeTool } from './tools/github_search_code';
 import { GithubSearchIssuesTool } from './tools/github_search_issues';
 import { GithubSearchRepositoriesTool } from './tools/github_search_repositories';
-import { GoogleSearchTool } from './tools/google_search';
 import { openOrFocusHaltForFeedback } from './tools/halt_for_feedback';
 import { LinkupSearchTool } from './tools/linkup_search';
 import { RipgrepLanguageModelTool } from './tools/ripgrep';
@@ -43,9 +42,6 @@ import { initFeloSessionStorage, registerFeloSessionConfigWatcher } from './util
 import { hasGitHubToken, initGitHubAuth, setupOrUpdateGitHubToken } from './utils/github_auth';
 import { openGithubContentPanelByUid } from './utils/github_content_panel';
 import { initGithubSessionStorage, registerGithubSessionConfigWatcher } from './utils/github_content_sessions';
-import { hasGoogleApiKey, hasGoogleSearchEngineId, initGoogleAuth, setupOrUpdateGoogleApiKey, setupOrUpdateGoogleSearchEngineId } from './utils/google_search_auth';
-import { openGoogleContentPanelByUid } from './utils/google_search_content_panel';
-import { initGoogleSessionStorage, registerGoogleSessionConfigWatcher } from './utils/google_search_content_sessions';
 import { hasLinkupApiKey, initLinkupAuth, setupOrUpdateLinkupApiKey } from './utils/linkup_search_auth';
 import { openLinkupContentPanelByUid } from './utils/linkup_search_content_panel';
 import { initLinkupSessionStorage, registerLinkupSessionConfigWatcher } from './utils/linkup_search_content_sessions';
@@ -204,14 +200,6 @@ async function ensureLanguageModelToolsRegistered(context: vscode.ExtensionConte
     }
 
     try {
-      const disposable = vscode.lm.registerTool('google_search', new GoogleSearchTool());
-      context.subscriptions.push(disposable);
-      outputChannel.appendLine('Registered language model tool: google_search.');
-    } catch (err) {
-      outputChannel.appendLine(`Failed to register language model tool google_search: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    try {
       const disposable = vscode.lm.registerTool('linkup_search', new LinkupSearchTool());
       context.subscriptions.push(disposable);
       outputChannel.appendLine('Registered language model tool: linkup_search.');
@@ -337,8 +325,6 @@ async function showReliefPilotMenu() {
   // Detect whether tokens are already stored
   const context7TokenExists = await hasContext7Token();
   const githubTokenExists = await hasGitHubToken();
-  const googleApiKeyExists = await hasGoogleApiKey();
-  const googleSearchEngineIdExists = await hasGoogleSearchEngineId();
   const linkupApiKeyExists = await hasLinkupApiKey();
   const exaApiKeyExists = await hasExaApiKey();
   const speechApiKeyExists = await hasSpeechApiKey();
@@ -348,12 +334,6 @@ async function showReliefPilotMenu() {
   const githubTokenMenuLabel = githubTokenExists
     ? 'Update API-token `github`'
     : 'Setup API-token `github`';
-  const googleApiKeyMenuLabel = googleApiKeyExists
-    ? 'Update API-token `GOOGLE_API_KEY`'
-    : 'Setup API-token `GOOGLE_API_KEY`';
-  const googleSearchEngineIdMenuLabel = googleSearchEngineIdExists
-    ? 'Update API-token `GOOGLE_SEARCH_ENGINE_ID`'
-    : 'Setup API-token `GOOGLE_SEARCH_ENGINE_ID`';
   const linkupApiKeyMenuLabel = linkupApiKeyExists
     ? 'Update API-token `LINKUP_API_KEY`'
     : 'Setup API-token `LINKUP_API_KEY`';
@@ -394,14 +374,6 @@ async function showReliefPilotMenu() {
       description: githubTokenExists ? 'Change stored GitHub API token' : 'Store a new GitHub API token securely',
     },
     {
-      label: googleApiKeyMenuLabel,
-      description: googleApiKeyExists ? 'Change stored Google API token `GOOGLE_API_KEY`' : 'Store a new Google API token `GOOGLE_API_KEY` securely',
-    },
-    {
-      label: googleSearchEngineIdMenuLabel,
-      description: googleSearchEngineIdExists ? 'Change stored Google API token `GOOGLE_SEARCH_ENGINE_ID`' : 'Store a new Google API token `GOOGLE_SEARCH_ENGINE_ID` securely',
-    },
-    {
       label: linkupApiKeyMenuLabel,
       description: linkupApiKeyExists ? 'Change stored Linkup API token `LINKUP_API_KEY`' : 'Store a new Linkup API token `LINKUP_API_KEY` securely',
     },
@@ -440,10 +412,6 @@ async function showReliefPilotMenu() {
     await setupOrUpdateContext7Token();
   } else if (pick.label === githubTokenMenuLabel) {
     await setupOrUpdateGitHubToken();
-  } else if (pick.label === googleApiKeyMenuLabel) {
-    await setupOrUpdateGoogleApiKey();
-  } else if (pick.label === googleSearchEngineIdMenuLabel) {
-    await setupOrUpdateGoogleSearchEngineId();
   } else if (pick.label === linkupApiKeyMenuLabel) {
     await setupOrUpdateLinkupApiKey();
   } else if (pick.label === exaApiKeyMenuLabel) {
@@ -690,7 +658,6 @@ export const activate = async (context: vscode.ExtensionContext) => {
   // Initialize auth modules
   initContext7Auth(context);
   initGitHubAuth(context);
-  initGoogleAuth(context);
   initLinkupAuth(context);
   initExaAuth(context);
   initSpeechAuth(context);
@@ -702,7 +669,6 @@ export const activate = async (context: vscode.ExtensionContext) => {
   initDuckDuckGoSessionStorage(context);
   initFeloSessionStorage(context);
   initGithubSessionStorage(context);
-  initGoogleSessionStorage(context);
   initLinkupSessionStorage(context);
   initExaSessionStorage(context);
   // Watchers for dynamic limit application on configuration change
@@ -711,7 +677,6 @@ export const activate = async (context: vscode.ExtensionContext) => {
   registerDuckDuckGoSessionConfigWatcher(context);
   registerFeloSessionConfigWatcher(context);
   registerGithubSessionConfigWatcher(context);
-  registerGoogleSessionConfigWatcher(context);
   registerLinkupSessionConfigWatcher(context);
   registerExaSessionConfigWatcher(context);
 
@@ -735,8 +700,6 @@ export const activate = async (context: vscode.ExtensionContext) => {
     // Internal command (not contributed) for possible programmatic usage/tests
     vscode.commands.registerCommand('reliefpilot.context7.setupToken', () => setupOrUpdateContext7Token()),
     vscode.commands.registerCommand('reliefpilot.github.setupToken', () => setupOrUpdateGitHubToken()),
-    vscode.commands.registerCommand('reliefpilot.google.setupApiKey', () => setupOrUpdateGoogleApiKey()),
-    vscode.commands.registerCommand('reliefpilot.google.setupSearchEngineId', () => setupOrUpdateGoogleSearchEngineId()),
     vscode.commands.registerCommand('reliefpilot.linkup.setupApiKey', () => setupOrUpdateLinkupApiKey()),
     vscode.commands.registerCommand('reliefpilot.exa.setupApiKey', () => setupOrUpdateExaApiKey()),
     vscode.commands.registerCommand('reliefpilot.speech.setupApiKey', () => setupOrUpdateSpeechApiKey()),
@@ -764,13 +727,6 @@ export const activate = async (context: vscode.ExtensionContext) => {
   context.subscriptions.push(
     vscode.commands.registerCommand('reliefpilot.github.showContent', async (args?: { uid?: string }) => {
       await openGithubContentPanelByUid(args?.uid ?? '');
-    })
-  );
-
-  // Command: open Google content webview (shown from Markdown command link for Google tools)
-  context.subscriptions.push(
-    vscode.commands.registerCommand('reliefpilot.google.showContent', async (args?: { uid?: string }) => {
-      await openGoogleContentPanelByUid(args?.uid ?? '');
     })
   );
 
