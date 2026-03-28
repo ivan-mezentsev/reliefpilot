@@ -152,13 +152,13 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    - PRE-FLIGHT CHECK (mandatory before any search): "Do I know the absolute path or already have the contents?" If YES — cancel the search immediately.
 
    - REPOSITORY DISCOVERY (when path/name is unknown): Use the `ripgrep` tool (structured search). Prefer `ripgrep` over any "semantic" tooling.
-    - Example (search in Obsidian developer docs):
-      - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"] }
-    - Example (search in source code):
-      - ripgrep: { pattern: "class ActionHandler", paths: ["src"], caseMode: "smart", glob: ["*.ts"] }
-    - Example (list matching files only):
-      - Run `ripgrep` and collect unique `matches[].path` from the results:
-        - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"], contextLines: 0 }
+   - Example (search in Obsidian developer docs):
+     - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"] }
+   - Example (search in source code):
+     - ripgrep: { pattern: "class ActionHandler", paths: ["src"], caseMode: "smart", glob: ["*.ts"] }
+   - Example (list matching files only):
+     - Run `ripgrep` and collect unique `matches[].path` from the results:
+       - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"], contextLines: 0 }
    - ALLOWED: `file_search` is permitted ONLY to discover filenames/paths. It must NEVER be used when an absolute path is already known.
 
    ## Tool Error Interpretation
