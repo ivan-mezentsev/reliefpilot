@@ -2,9 +2,11 @@ import { Bot } from 'grammy'
 import * as vscode from 'vscode'
 import { getTelegramBotToken } from '../../utils/telegram_auth'
 import { ApprovalCoordinator } from './approvalCoordinator'
+import type { DiffProvider } from './diffProvider'
 import type { MediaTransfer } from './mediaStore'
 import { TelegramMediaStore } from './mediaStore'
 import { MessageBridge } from './messageBridge'
+import type { RemoteSessionRegistry } from './remoteSessionRegistry'
 import { registerCommands } from './telegramCommands'
 
 export type BotStatus = 'stopped' | 'starting' | 'connected' | 'reconnecting' | 'error'
@@ -29,6 +31,8 @@ export class TelegramBotService {
   private messageBridge: MessageBridge | null = null
   private approvalCoordinator: ApprovalCoordinator | null = null
   private mediaStore: TelegramMediaStore | null = null
+  private remoteSessionRegistry: RemoteSessionRegistry | null = null
+  private diffProvider: DiffProvider | null = null
   private approvalResolutionSubscription: vscode.Disposable | null = null
   private startupWatchdog: ReturnType<typeof setTimeout> | null = null
   private state: BotState = {
@@ -65,6 +69,24 @@ export class TelegramBotService {
 
   public getMediaStore(): TelegramMediaStore | null {
     return this.mediaStore
+  }
+
+  public setRemoteSessionRegistry(remoteSessionRegistry: RemoteSessionRegistry): void {
+    this.remoteSessionRegistry = remoteSessionRegistry
+    this.wireBridgeDependencies()
+  }
+
+  public getRemoteSessionRegistry(): RemoteSessionRegistry | null {
+    return this.remoteSessionRegistry
+  }
+
+  public setDiffProvider(diffProvider: DiffProvider): void {
+    this.diffProvider = diffProvider
+    this.wireBridgeDependencies()
+  }
+
+  public getDiffProvider(): DiffProvider | null {
+    return this.diffProvider
   }
 
   public getAuthorizedUserIds(): number[] {
@@ -204,6 +226,14 @@ export class TelegramBotService {
 
     if (this.mediaStore) {
       this.messageBridge.setMediaStore(this.mediaStore)
+    }
+
+    if (this.remoteSessionRegistry) {
+      this.messageBridge.setRemoteSessionRegistry(this.remoteSessionRegistry)
+    }
+
+    if (this.diffProvider) {
+      this.messageBridge.setDiffProvider(this.diffProvider)
     }
   }
 

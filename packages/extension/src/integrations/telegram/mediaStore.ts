@@ -12,6 +12,8 @@ export interface MediaTransfer {
   direction: MediaTransferDirection;
   userId: number;
   chatId: number;
+  sessionId: string | null;
+  sessionTitle: string | null;
   fileName: string;
   mimeType: string | null;
   localPath: string | null;
@@ -35,6 +37,8 @@ export interface InboundDocumentValidationResult {
 export interface StageInboundBufferInput {
   userId: number;
   chatId: number;
+  sessionId?: string | null;
+  sessionTitle?: string | null;
   fileName: string;
   mimeType?: string | null;
   telegramFileId?: string | null;
@@ -107,6 +111,8 @@ export class TelegramMediaStore {
       direction: 'inbound',
       userId: input.userId,
       chatId: input.chatId,
+      sessionId: input.sessionId ?? null,
+      sessionTitle: input.sessionTitle ?? null,
       fileName: safeFileName,
       mimeType: input.mimeType ?? null,
       localPath,
@@ -132,7 +138,13 @@ export class TelegramMediaStore {
     }
   }
 
-  public async beginOutboundTransfer(userId: number, chatId: number, filePath: string, mimeType?: string | null): Promise<MediaTransfer> {
+  public async beginOutboundTransfer(
+    userId: number,
+    chatId: number,
+    filePath: string,
+    mimeType?: string | null,
+    sessionContext?: { sessionId?: string | null; sessionTitle?: string | null },
+  ): Promise<MediaTransfer> {
     // Outbound transfers are recorded before the send so failures can still be
     // surfaced back to the user and to logs with a stable transfer id.
     const fileName = path.basename(filePath);
@@ -145,6 +157,8 @@ export class TelegramMediaStore {
       direction: 'outbound',
       userId,
       chatId,
+      sessionId: sessionContext?.sessionId ?? null,
+      sessionTitle: sessionContext?.sessionTitle ?? null,
       fileName,
       mimeType: mimeType ?? null,
       localPath: filePath,

@@ -20,7 +20,7 @@ suite('Ask Report external Telegram resolution', function () {
         assert.strictEqual(state, 'resolved')
 
         const result = await resultPromise
-        assert.deepStrictEqual(result, { decision: 'Submit', value: 'Yes' })
+        assert.deepStrictEqual(result, { decision: 'Submit', value: 'Yes', source: 'telegram' })
     })
 
     test('resolves a freeform ask_report from Telegram text reply', async () => {
@@ -38,6 +38,6 @@ suite('Ask Report external Telegram resolution', function () {
         assert.strictEqual(state, 'resolved')
 
         const result = await resultPromise
-        assert.deepStrictEqual(result, { decision: 'Submit', value: 'Ship it' })
+        assert.deepStrictEqual(result, { decision: 'Submit', value: 'Ship it', source: 'telegram' })
     })
 })

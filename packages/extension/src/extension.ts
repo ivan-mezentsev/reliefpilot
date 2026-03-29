@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import { ApprovalCoordinator } from './integrations/telegram/approvalCoordinator';
 import { TelegramMediaStore } from './integrations/telegram/mediaStore';
+import { parseTelegramNotificationMode } from './integrations/telegram/messageBridge';
 import { TelegramBotService } from './integrations/telegram/telegramBotService';
 import { CREATE_SPECS_MODE_COMMAND, registerSpecsModeCommand } from './specsMode';
 import { AiFetchUrlLanguageModelTool } from './tools/ai_fetch_url';
-import { AskReportLanguageModelTool, onAskReportCreated, openOrFocusAskReportById } from './tools/ask_report';
+import { AskReportLanguageModelTool, onAskReportCreated, onAskReportSettled, openOrFocusAskReportById } from './tools/ask_report';
 import { CodeCheckerLanguageModelTool } from './tools/code_checker';
 import { Context7GetLibraryDocsTool } from './tools/context7_get_library_docs';
 import { Context7ResolveLibraryIdTool } from './tools/context7_resolve_library_id';
@@ -57,6 +58,8 @@ import { selectInputDevice } from './utils/speechToText';
 import { statusBarActivity } from './utils/statusBar';
 import { hasTelegramBotToken, initTelegramAuth, setupOrUpdateTelegramBotToken } from './utils/telegram_auth';
 import { toggleActiveVoiceInput } from './utils/voiceInputCommand';
+import { DiffProvider } from './integrations/telegram/diffProvider';
+import { RemoteSessionRegistry } from './integrations/telegram/remoteSessionRegistry';
 
 // Guard to ensure language model tools are registered only once per extension host process.
 let lmToolsRegistered = false;
@@ -829,10 +832,29 @@ export const activate = async (context: vscode.ExtensionContext) => {
   telegramBotService = new TelegramBotService(telegramOutputChannel);
   const approvalCoordinator = new ApprovalCoordinator();
   const telegramMediaStore = new TelegramMediaStore(telegramOutputChannel);
+  const remoteSessionRegistry = new RemoteSessionRegistry();
+  const diffProvider = new DiffProvider();
+  const applyTelegramNotificationMode = () => {
+    const mode = parseTelegramNotificationMode(
+      vscode.workspace.getConfiguration('reliefpilot').get<string>('telegramNotificationMode', 'actionable'),
+    );
+    remoteSessionRegistry.setNotificationMode(mode);
+  };
+
+  applyTelegramNotificationMode();
   telegramBotService.setApprovalCoordinator(approvalCoordinator);
   telegramBotService.setMediaStore(telegramMediaStore);
+  telegramBotService.setRemoteSessionRegistry(remoteSessionRegistry);
+  telegramBotService.setDiffProvider(diffProvider);
   configureExecuteCommandApprovals({ approvalCoordinator, telegramBotService });
   context.subscriptions.push(approvalCoordinator);
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('reliefpilot.telegramNotificationMode')) {
+        applyTelegramNotificationMode();
+      }
+    }),
+  );
 
   // Telegram Bot status bar item (right of RP status bar)
   telegramStatusBarItem = vscode.window.createStatusBarItem('reliefpilot.telegramStatus', vscode.StatusBarAlignment.Left, -101);
@@ -884,6 +906,15 @@ export const activate = async (context: vscode.ExtensionContext) => {
           telegramOutputChannel.appendLine(`Failed to send ask_report notification to ${userId}: ${msg}`);
         });
       }
+    }),
+    onAskReportSettled((event) => {
+      if (!telegramBotService || telegramBotService.getState().status !== 'connected') return;
+      const bridge = telegramBotService.getMessageBridge();
+      if (!bridge) return;
+      bridge.handleAskReportSettlement(event).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        telegramOutputChannel.appendLine(`Failed to sync ask_report settlement ${event.id}: ${msg}`);
+      });
     }),
   );
 

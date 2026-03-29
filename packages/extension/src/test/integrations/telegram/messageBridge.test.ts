@@ -1,8 +1,12 @@
 import * as assert from 'assert';
 import {
   buildTelegramAskReportText,
+  buildTelegramDocumentCaption,
   parseAskReportDeliveryMode,
+  parseTelegramNotificationMode,
   parseTelegramActionCallback,
+  shouldSendAutomaticDiffFollowUp,
+  shouldDeliverAutomaticTelegramNotification,
   splitTelegramMessage,
 } from '../../../integrations/telegram/messageBridge';
 
@@ -47,10 +51,53 @@ suite('Telegram message bridge helpers', () => {
     assert.strictEqual(parseAskReportDeliveryMode('unexpected'), 'auto');
   });
 
+  test('parseTelegramNotificationMode normalizes supported settings safely', () => {
+    assert.strictEqual(parseTelegramNotificationMode('all'), 'all');
+    assert.strictEqual(parseTelegramNotificationMode(' ACTIONABLE '), 'actionable');
+    assert.strictEqual(parseTelegramNotificationMode(undefined), 'actionable');
+    assert.strictEqual(parseTelegramNotificationMode('unexpected'), 'actionable');
+  });
+
+  test('shouldDeliverAutomaticTelegramNotification filters informational events in actionable mode', () => {
+    assert.strictEqual(shouldDeliverAutomaticTelegramNotification('all', 'informational'), true);
+    assert.strictEqual(shouldDeliverAutomaticTelegramNotification('actionable', 'blocking'), true);
+    assert.strictEqual(shouldDeliverAutomaticTelegramNotification('actionable', 'failure'), true);
+    assert.strictEqual(shouldDeliverAutomaticTelegramNotification('actionable', 'informational'), false);
+  });
+
   test('buildTelegramAskReportText truncates oversized messages safely', () => {
     const text = buildTelegramAskReportText('Topic', 'x'.repeat(200), 80);
     assert.ok(text.length <= 80, `Expected truncated text to fit the limit, got ${text.length}`);
     assert.match(text, /\[truncated for Telegram\]$/);
+  });
+
+  test('buildTelegramDocumentCaption keeps diff summary and patch in one Telegram send safely', () => {
+    const caption = buildTelegramDocumentCaption('🧾 Diff · Session', 'x'.repeat(300), 120);
+    assert.ok(caption.length <= 120, `Expected caption to fit the limit, got ${caption.length}`);
+    assert.match(caption, /\[summary truncated for Telegram caption\]$/);
+  });
+
+  test('shouldSendAutomaticDiffFollowUp only delivers new ready patches', () => {
+    assert.strictEqual(shouldSendAutomaticDiffFollowUp({
+      baselineFingerprint: 'same',
+      nextFingerprint: 'same',
+      artifactPath: '/tmp/change.patch',
+      status: 'ready',
+    }), false);
+
+    assert.strictEqual(shouldSendAutomaticDiffFollowUp({
+      baselineFingerprint: 'before',
+      nextFingerprint: 'after',
+      artifactPath: '/tmp/change.patch',
+      status: 'ready',
+    }), true);
+
+    assert.strictEqual(shouldSendAutomaticDiffFollowUp({
+      baselineFingerprint: 'before',
+      nextFingerprint: 'after',
+      artifactPath: null,
+      status: 'ready',
+    }), false);
   });
 
   test('splitTelegramMessage breaks long content into bounded chunks', () => {

@@ -11,11 +11,13 @@ import type { ApprovalResolution, PendingApprovalRequest } from './approvalCoord
 import { ApprovalCoordinator } from './approvalCoordinator'
 import type { MediaTransfer } from './mediaStore'
 import { TelegramMediaStore } from './mediaStore'
+import type { RemoteSessionRegistry, TelegramNotificationMode } from './remoteSessionRegistry'
 import { createAuthMiddleware } from './telegramAuth'
 import type { TelegramBotService } from './telegramBotService'
 
 const MAX_MESSAGE_LENGTH = 4096
 const MAX_ASK_REPORT_MESSAGE_LENGTH = 4000
+const MAX_DOCUMENT_CAPTION_LENGTH = 1024
 
 interface PendingVoiceConfirmation {
   voiceRequestId: string
@@ -35,6 +37,8 @@ interface PendingAskReportRecipient {
 interface PendingAskReportState {
   recipients: PendingAskReportRecipient[]
   options: string[]
+  inboxItemId?: string
+  sessionId?: string
 }
 
 export type AskReportDeliveryMode = 'auto' | 'message' | 'document'
@@ -77,6 +81,27 @@ export function parseAskReportDeliveryMode(value: string | undefined): AskReport
   }
 }
 
+export function parseTelegramNotificationMode(value: string | undefined): TelegramNotificationMode {
+  switch ((value ?? '').trim().toLowerCase()) {
+    case 'all':
+      return 'all'
+    case 'actionable':
+    default:
+      return 'actionable'
+  }
+}
+
+export function shouldDeliverAutomaticTelegramNotification(
+  mode: TelegramNotificationMode,
+  severity: 'blocking' | 'informational' | 'failure',
+): boolean {
+  if (mode === 'all') {
+    return true
+  }
+
+  return severity === 'blocking' || severity === 'failure'
+}
+
 export function buildTelegramAskReportText(topic: string, message: string, maxLength: number = MAX_ASK_REPORT_MESSAGE_LENGTH): string {
   const base = `📋 ${topic}\n\n${message}`
   if (base.length <= maxLength) {
@@ -86,6 +111,30 @@ export function buildTelegramAskReportText(topic: string, message: string, maxLe
   const suffix = '\n\n[truncated for Telegram]'
   const truncated = base.substring(0, Math.max(0, maxLength - suffix.length - 3)).trimEnd()
   return `${truncated}...${suffix}`
+}
+
+export function buildTelegramDocumentCaption(title: string, summary: string, maxLength: number = MAX_DOCUMENT_CAPTION_LENGTH): string {
+  const base = `${title}\n\n${summary}`
+  if (base.length <= maxLength) {
+    return base
+  }
+
+  const suffix = '\n\n[summary truncated for Telegram caption]'
+  const truncated = base.substring(0, Math.max(0, maxLength - suffix.length - 3)).trimEnd()
+  return `${truncated}...${suffix}`
+}
+
+export function shouldSendAutomaticDiffFollowUp(input: {
+  baselineFingerprint: string | null | undefined
+  nextFingerprint: string | null | undefined
+  artifactPath: string | null | undefined
+  status: 'ready' | 'unavailable' | 'stale'
+}): boolean {
+  if (input.status !== 'ready' || !input.artifactPath || !input.nextFingerprint) {
+    return false
+  }
+
+  return input.nextFingerprint !== (input.baselineFingerprint ?? null)
 }
 
 /** Split long Telegram responses into message-sized chunks while preferring newline boundaries. */
@@ -125,6 +174,7 @@ export class MessageBridge {
   private outputChannel: vscode.OutputChannel
   private approvalCoordinator: ApprovalCoordinator | null = null
   private mediaStore: TelegramMediaStore | null = null
+  private remoteSessionRegistry: RemoteSessionRegistry | null = null
   private pendingAskReports = new Map<string, PendingAskReportState>()
   private pendingVoiceConfirmations = new Map<string, PendingVoiceConfirmation>()
 
@@ -140,6 +190,15 @@ export class MessageBridge {
 
   public setMediaStore(mediaStore: TelegramMediaStore): void {
     this.mediaStore = mediaStore
+  }
+
+  public setRemoteSessionRegistry(remoteSessionRegistry: RemoteSessionRegistry): void {
+    this.remoteSessionRegistry = remoteSessionRegistry
+  }
+
+  public setDiffProvider(_diffProvider: unknown): void {
+    // Diff capture is initiated from command handlers via TelegramBotService.
+    // The bridge only needs to know how to deliver the resulting snapshot.
   }
 
   public registerHandlers(): void {
@@ -164,10 +223,16 @@ export class MessageBridge {
       this.botService.incrementMessageCount()
       this.outputChannel.appendLine(`[Telegram] Received message from ${ctx.from?.id}: ${text.substring(0, 100)}...`)
 
-      await ctx.reply('⏳ Processing your request...')
+        const routedRequest = this.buildSessionAwarePrompt(text)
+
+        if (routedRequest.notice) {
+          await ctx.reply(routedRequest.notice)
+        }
+
+        await ctx.reply('⏳ Processing your request...')
 
       try {
-        const response = await this.forwardToRelief(text)
+          const response = await this.forwardToRelief(routedRequest.prompt)
         await this.sendLongMessage(ctx, response)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
@@ -250,6 +315,15 @@ export class MessageBridge {
       throw new Error('No authorized Telegram users are configured for approvals.')
     }
 
+    this.remoteSessionRegistry?.registerApprovalRequest({
+      approvalId: request.approvalId,
+      command: request.command,
+      destructive: request.destructive,
+      customCwd: request.customCwd,
+      sessionTitle: request.customCwd ? `Command approval · ${path.basename(request.customCwd)}` : 'Command approval',
+      workspacePath: request.customCwd ?? this.getWorkspacePath(),
+    })
+
     let delivered = 0
     for (const userId of authorizedIds) {
       const sent = await this.bot.api.sendMessage(userId, this.renderApprovalRequest(request), {
@@ -263,6 +337,8 @@ export class MessageBridge {
   }
 
   public async updateApprovalResolution(request: PendingApprovalRequest, resolution: ApprovalResolution): Promise<void> {
+    this.remoteSessionRegistry?.resolveApproval(request.approvalId, this.renderApprovalResolution(request, resolution))
+
     for (const telegramMessage of request.telegramMessages) {
       await this.safeEditMessage(
         telegramMessage.chatId,
@@ -287,6 +363,46 @@ export class MessageBridge {
     return transfers
   }
 
+  public async sendDiffSnapshotToChat(input: {
+    chatId: number
+    userId: number
+    sessionId: string
+    sessionTitle: string
+    summary: string
+    artifactPath?: string | null
+  }): Promise<void> {
+    if (input.artifactPath) {
+      try {
+        await this.deliverFileToChat(
+          input.chatId,
+          input.userId,
+          input.artifactPath,
+          buildTelegramDocumentCaption(`🧾 Diff · ${input.sessionTitle}`, input.summary),
+          {
+            sessionId: input.sessionId,
+            sessionTitle: input.sessionTitle,
+            purpose: 'diff',
+          },
+        )
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        this.remoteSessionRegistry?.updateDiffSnapshotStatus(
+          input.sessionId,
+          'stale',
+          `${input.summary}\nArtifact delivery failed: ${message}`,
+        )
+        await this.sendLongMessageToChat(
+          input.chatId,
+          `⚠️ Diff artifact for ${input.sessionTitle} could not be delivered. ${message}`,
+        )
+      }
+
+      return
+    }
+
+    await this.sendLongMessageToChat(input.chatId, `🧾 Diff · ${input.sessionTitle}\n\n${input.summary}`)
+  }
+
   public async sendAskReportNotification(
     chatId: number,
     reportId: string,
@@ -294,12 +410,23 @@ export class MessageBridge {
     message: string,
     options?: string[],
   ): Promise<void> {
+    const askReportEntry = this.remoteSessionRegistry?.registerAskReport({
+      reportId,
+      topicName: topic,
+      message,
+      options,
+      sessionTitle: this.getRemoteSessionTitle(topic),
+      workspacePath: this.getWorkspacePath(),
+    })
     const markdownBody = `# ${topic}\n\n${message}`
     const localPath = await this.createAskReportTempFile(topic, markdownBody)
-    const messageBody = buildTelegramAskReportText(topic, `Local path: ${localPath}\n\n${message}`)
+    const messageBody = buildTelegramAskReportText(
+      `ask_report · ${topic}`,
+      `Task: ${askReportEntry?.session.title ?? this.getRemoteSessionTitle(topic)}\nState: pending\nLocal path: ${localPath}\n\n${message}`,
+    )
     const caption = options && options.length > 0
-      ? `📋 ask_report received.\nLocal path: ${localPath}\n\nChoose an option below.`
-      : `📋 ask_report received.\nLocal path: ${localPath}\n\nReply with your next message.`
+      ? `📋 ask_report received.\nTask: ${askReportEntry?.session.title ?? this.getRemoteSessionTitle(topic)}\nState: pending\nLocal path: ${localPath}\n\nChoose an option below.`
+      : `📋 ask_report received.\nTask: ${askReportEntry?.session.title ?? this.getRemoteSessionTitle(topic)}\nState: pending\nLocal path: ${localPath}\n\nReply with your next message.`
     const deliveryMode = parseAskReportDeliveryMode(
       vscode.workspace.getConfiguration('reliefpilot').get<string>('telegramAskReportDeliveryMode', 'auto'),
     )
@@ -326,6 +453,8 @@ export class MessageBridge {
       const state = this.pendingAskReports.get(reportId) ?? {
         recipients: [],
         options: options ? [...options] : [],
+        inboxItemId: askReportEntry?.item.inboxItemId,
+        sessionId: askReportEntry?.session.sessionId,
       }
       state.recipients.push({
         userId: chatId,
@@ -336,11 +465,80 @@ export class MessageBridge {
       if (state.options.length === 0 && options && options.length > 0) {
         state.options = [...options]
       }
+      if (!state.inboxItemId && askReportEntry?.item.inboxItemId) {
+        state.inboxItemId = askReportEntry.item.inboxItemId
+      }
+      if (!state.sessionId && askReportEntry?.session.sessionId) {
+        state.sessionId = askReportEntry.session.sessionId
+      }
       this.pendingAskReports.set(reportId, state)
+
+      if (askReportEntry?.session.sessionId) {
+        await this.maybeSendAskReportDiffSnapshot({
+          chatId,
+          userId: chatId,
+          sessionId: askReportEntry.session.sessionId,
+          sessionTitle: askReportEntry.session.title,
+          workspacePath: askReportEntry.session.workspacePath,
+        })
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       this.outputChannel.appendLine(`[Telegram] Failed to send ask_report notification: ${errMsg}`)
     }
+  }
+
+  private async maybeSendAskReportDiffSnapshot(input: {
+    chatId: number
+    userId: number
+    sessionId: string
+    sessionTitle: string
+    workspacePath: string | null
+  }): Promise<void> {
+    const diffProvider = this.botService.getDiffProvider()
+    if (!diffProvider || !input.workspacePath) {
+      return
+    }
+
+    const snapshot = await diffProvider.captureLatestDiff(input.sessionId, input.workspacePath)
+    if (!snapshot.fullArtifactPath || !snapshot.fingerprint) {
+      return
+    }
+
+    const previousSnapshot = this.remoteSessionRegistry?.getLatestDiffSnapshot(input.sessionId)
+    if (!shouldSendAutomaticDiffFollowUp({
+      baselineFingerprint: previousSnapshot?.fingerprint,
+      nextFingerprint: snapshot.fingerprint,
+      artifactPath: snapshot.fullArtifactPath,
+      status: snapshot.status,
+    })) {
+      return
+    }
+
+    this.remoteSessionRegistry?.recordDiffSnapshot({
+      sessionId: input.sessionId,
+      sessionTitle: input.sessionTitle,
+      workspacePath: input.workspacePath,
+      snapshot: {
+        diffId: snapshot.diffId,
+        sessionId: input.sessionId,
+        source: snapshot.source,
+        summary: snapshot.summary,
+        fullArtifactPath: snapshot.fullArtifactPath,
+        fingerprint: snapshot.fingerprint,
+        createdAt: snapshot.createdAt,
+        status: snapshot.status,
+      },
+    })
+
+    await this.sendDiffSnapshotToChat({
+      chatId: input.chatId,
+      userId: input.userId,
+      sessionId: input.sessionId,
+      sessionTitle: input.sessionTitle,
+      summary: snapshot.summary,
+      artifactPath: snapshot.fullArtifactPath,
+    })
   }
 
   private async tryHandlePendingAskReportResponse(ctx: Context, userId: number, text: string): Promise<boolean> {
@@ -357,8 +555,6 @@ export class MessageBridge {
 
     const state = resolveAskReportFromTelegram(pending.reportId, value)
     if (state === 'resolved') {
-      await this.markAskReportResolved(pending.reportId, `Submitted from Telegram ✓\n\n${value}`)
-      await ctx.reply('✅ ask_report reply delivered to Relief Pilot.')
       return true
     }
 
@@ -574,17 +770,30 @@ export class MessageBridge {
       }
 
       const buffer = await this.downloadTelegramFile(file.file_path)
+      const activeSession = this.remoteSessionRegistry?.getSelectedSession()
       const transfer = await this.mediaStore.stageInboundBuffer({
         userId,
         chatId,
+        sessionId: activeSession?.sessionId,
+        sessionTitle: activeSession?.title,
         fileName: document.file_name ?? document.file_id,
         mimeType: document.mime_type ?? null,
         telegramFileId: document.file_id,
         buffer,
       })
 
+      this.remoteSessionRegistry?.registerRemoteItem({
+        kind: 'status',
+        title: 'Telegram artifact received',
+        summary: `${transfer.fileName} staged at ${transfer.localPath}`,
+        status: 'informational',
+        sessionId: activeSession?.sessionId,
+        sessionTitle: activeSession?.title ?? this.getRemoteSessionTitle('Artifact upload'),
+        workspacePath: activeSession?.workspacePath ?? this.getWorkspacePath(),
+      })
+
       await ctx.reply(
-        `✅ File received and staged for Relief.\nName: ${transfer.fileName}\nPath: ${transfer.localPath}`,
+        `✅ File received and staged for Relief.\nSession: ${activeSession?.title ?? 'no active session'}\nName: ${transfer.fileName}\nPath: ${transfer.localPath}`,
       )
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -593,24 +802,61 @@ export class MessageBridge {
     }
   }
 
-  private async deliverFileToChat(chatId: number, userId: number, filePath: string, caption: string): Promise<MediaTransfer> {
+  private async deliverFileToChat(
+    chatId: number,
+    userId: number,
+    filePath: string,
+    caption: string,
+    context?: { sessionId?: string; sessionTitle?: string; purpose?: string },
+  ): Promise<MediaTransfer> {
     // Outbound delivery reuses the media store so status transitions are visible
     // for both successful sends and failed attempts.
     if (!this.mediaStore) {
       throw new Error('Media store is unavailable.')
     }
 
-    const transfer = await this.mediaStore.beginOutboundTransfer(userId, chatId, filePath)
+    const transfer = await this.mediaStore.beginOutboundTransfer(
+      userId,
+      chatId,
+      filePath,
+      null,
+      {
+        sessionId: context?.sessionId,
+        sessionTitle: context?.sessionTitle,
+      },
+    )
     try {
       await fs.access(filePath)
       await this.bot.api.sendDocument(chatId, new InputFile(filePath), {
         caption,
       })
       this.mediaStore.markSent(transfer.transferId)
+      if (context?.sessionId && context?.sessionTitle) {
+        this.remoteSessionRegistry?.registerRemoteItem({
+          kind: 'status',
+          title: 'Telegram artifact delivered',
+          summary: `${context.purpose ?? 'Artifact'} delivered: ${path.basename(filePath)}`,
+          status: 'informational',
+          sessionId: context.sessionId,
+          sessionTitle: context.sessionTitle,
+          workspacePath: this.getWorkspacePath(),
+        })
+      }
       return this.mediaStore.getTransfer(transfer.transferId) ?? transfer
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.mediaStore.markFailed(transfer.transferId, message)
+      if (context?.sessionId && context?.sessionTitle) {
+        this.remoteSessionRegistry?.registerRemoteItem({
+          kind: 'status',
+          title: 'Telegram artifact delivery failed',
+          summary: `${context.purpose ?? 'Artifact'} delivery failed: ${message}`,
+          status: 'failed',
+          sessionId: context.sessionId,
+          sessionTitle: context.sessionTitle,
+          workspacePath: this.getWorkspacePath(),
+        })
+      }
       await this.bot.api.sendMessage(chatId, `❌ File delivery failed: ${message}`)
       throw err
     }
@@ -688,6 +934,12 @@ export class MessageBridge {
     }
   }
 
+  private async sendLongMessageToChat(chatId: number, text: string): Promise<void> {
+    for (const chunk of splitTelegramMessage(text)) {
+      await this.bot.api.sendMessage(chatId, chunk)
+    }
+  }
+
   private buildAskReportKeyboard(reportId: string, options: string[]): InlineKeyboard {
     const keyboard = new InlineKeyboard()
     options.forEach((option, index) => {
@@ -753,7 +1005,6 @@ export class MessageBridge {
 
     const state = resolveAskReportFromTelegram(reportId, selectedOption)
     if (state === 'resolved') {
-      await this.markAskReportResolved(reportId, `Submitted from Telegram ✓\n\n${selectedOption}`)
       await ctx.answerCallbackQuery({ text: `Selected: ${selectedOption}` })
       return
     }
@@ -777,6 +1028,66 @@ export class MessageBridge {
     this.pendingAskReports.delete(reportId)
   }
 
+  public async handleAskReportSettlement(event: {
+    id: string
+    decision: 'Submit' | 'Cancel'
+    value: string
+    timeout?: boolean
+    source: 'telegram' | 'webview'
+  }): Promise<void> {
+    const pending = this.pendingAskReports.get(event.id)
+
+    if (event.decision === 'Submit') {
+      this.remoteSessionRegistry?.resolveAskReport(
+        event.id,
+        event.source === 'telegram'
+          ? `Submitted from Telegram ✓ ${event.value}`
+          : `Resolved in VS Code ✓ ${event.value}`,
+      )
+    } else {
+      this.remoteSessionRegistry?.expireAskReport(
+        event.id,
+        event.timeout === true
+          ? 'Expired before a remote reply was received.'
+          : 'Closed outside Telegram before a remote reply was received.',
+      )
+    }
+
+    if (!pending) {
+      return
+    }
+
+    this.pendingAskReports.delete(event.id)
+
+    const severity = event.decision === 'Submit' && event.source === 'telegram'
+      ? 'blocking'
+      : event.decision === 'Submit'
+        ? 'informational'
+        : 'failure'
+
+    if (!shouldDeliverAutomaticTelegramNotification(this.getTelegramNotificationMode(), severity)) {
+      return
+    }
+
+    const resolutionText = event.decision === 'Submit'
+      ? event.source === 'telegram'
+        ? `Submitted from Telegram ✓\n\n${event.value}`
+        : `Resolved in VS Code ✓\n\n${event.value}`
+      : event.timeout === true
+        ? 'ask_report expired before a Telegram reply was received.'
+        : 'ask_report was closed outside Telegram before a reply was received.'
+
+    const deliveredChats = new Set<number>()
+    for (const recipient of pending.recipients) {
+      if (deliveredChats.has(recipient.chatId)) {
+        continue
+      }
+
+      deliveredChats.add(recipient.chatId)
+      await this.bot.api.sendMessage(recipient.chatId, resolutionText)
+    }
+  }
+
   private enableAskReportCustomReply(reportId: string, userId: number): boolean {
     const state = this.pendingAskReports.get(reportId)
     if (!state) {
@@ -790,15 +1101,6 @@ export class MessageBridge {
 
     recipient.expectsFreeformResponse = true
     return true
-  }
-
-  private async markAskReportResolved(reportId: string, resolutionText: string): Promise<void> {
-    const recipients = this.pendingAskReports.get(reportId)?.recipients ?? []
-    this.pendingAskReports.delete(reportId)
-
-    for (const recipient of recipients) {
-      await this.bot.api.sendMessage(recipient.chatId, resolutionText)
-    }
   }
 
   private buildAskReportFileName(topic: string): string {
@@ -831,6 +1133,68 @@ export class MessageBridge {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.outputChannel.appendLine(`[Telegram] Failed to edit message ${messageId} in ${chatId}: ${message}`)
+    }
+  }
+
+  private getWorkspacePath(): string | null {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null
+  }
+
+  private getTelegramNotificationMode(): TelegramNotificationMode {
+    const mode = parseTelegramNotificationMode(
+      vscode.workspace.getConfiguration('reliefpilot').get<string>('telegramNotificationMode', 'actionable'),
+    )
+
+    this.remoteSessionRegistry?.setNotificationMode(mode)
+    return mode
+  }
+
+  private getRemoteSessionTitle(topic: string): string {
+    const workspacePath = this.getWorkspacePath()
+    if (workspacePath) {
+      return `${path.basename(workspacePath)} · ${topic}`
+    }
+
+    return topic
+  }
+
+  private buildSessionAwarePrompt(text: string): { prompt: string; notice?: string } {
+    const trimmedText = text.trim()
+    if (!this.remoteSessionRegistry) {
+      return { prompt: trimmedText }
+    }
+
+    const activeSession = this.remoteSessionRegistry.getSelectedSession()
+    if (!activeSession) {
+      const sessionTitle = this.getRemoteSessionTitle(trimmedText.slice(0, 80) || 'Remote task')
+      this.remoteSessionRegistry.registerRemoteItem({
+        kind: 'status',
+        title: 'Telegram task request',
+        summary: trimmedText,
+        status: 'informational',
+        sessionTitle,
+        workspacePath: this.getWorkspacePath(),
+      })
+
+      return {
+        prompt: `Start a new Relief Pilot task requested from Telegram.\n\nUser request:\n${trimmedText}`,
+        notice: `🆕 Активной remote-сессии не было. Начинаю новую задачу: ${sessionTitle}`,
+      }
+    }
+
+    this.remoteSessionRegistry.registerRemoteItem({
+      kind: 'status',
+      title: 'Telegram follow-up',
+      summary: trimmedText,
+      status: 'informational',
+      sessionId: activeSession.sessionId,
+      sessionTitle: activeSession.title,
+      workspacePath: activeSession.workspacePath,
+    })
+
+    return {
+      prompt: `Continue the active Relief Pilot session "${activeSession.title}" (sessionId: ${activeSession.sessionId}).\n\nLatest Telegram follow-up:\n${trimmedText}`,
+      notice: `🔁 Продолжаю активную remote-сессию: ${activeSession.title}`,
     }
   }
 

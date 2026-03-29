@@ -39,6 +39,7 @@ export type AskUserResult = {
     decision: 'Submit' | 'Cancel'
     value: string
     timeout?: boolean
+    source?: 'telegram' | 'webview'
 }
 
 export type AskReportInput = {
@@ -52,6 +53,16 @@ export type ExternalAskReportResolution = {
     value: string
     source: 'telegram'
 }
+
+const _onAskReportSettled = new vscode.EventEmitter<{
+    id: string
+    topicName: string
+    decision: 'Submit' | 'Cancel'
+    value: string
+    timeout?: boolean
+    source: 'telegram' | 'webview'
+}>()
+export const onAskReportSettled = _onAskReportSettled.event
 
 type PendingAskReportResolver = {
     resolveExternally: (result: ExternalAskReportResolution) => boolean
@@ -712,6 +723,14 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                 settled = true
                 if (opts.historyId) {
                     pendingAskReportResolvers.delete(opts.historyId)
+                    _onAskReportSettled.fire({
+                        id: opts.historyId,
+                        topicName: title,
+                        decision: res.decision,
+                        value: res.value,
+                        timeout: res.timeout,
+                        source: res.source ?? 'webview',
+                    })
                 }
                 voiceController.dispose()
                 try { panel.dispose() } catch { /* noop */ }
@@ -729,6 +748,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                     finalize({
                         decision: result.decision,
                         value: result.value,
+                        source: result.source,
                     })
                     return true
                 },
@@ -748,15 +768,15 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                 switch (msg.type) {
                     case 'submit': {
                         const value = typeof msg.value === 'string' ? msg.value : ''
-                        finalize({ decision: 'Submit', value })
+                        finalize({ decision: 'Submit', value, source: 'webview' })
                         return
                     }
                     case 'cancel': {
-                        finalize({ decision: 'Cancel', value: '' })
+                        finalize({ decision: 'Cancel', value: '', source: 'webview' })
                         return
                     }
                     case 'timeout': {
-                        finalize({ decision: 'Cancel', value: '', timeout: true })
+                        finalize({ decision: 'Cancel', value: '', timeout: true, source: 'webview' })
                         return
                     }
                     case 'openExternal': {

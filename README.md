@@ -23,6 +23,40 @@ Can you check the docs and explain how the project works? #ask_report
 
 ![execute_command](docs/demo-execute_command.gif)
 
+### Telegram Remote Control
+
+- Start the bot from the Command Palette with `Relief Pilot: Start Telegram Bot`.
+- Authorized Telegram users can:
+  - send text messages that continue the active remote session or start a new task when no session is active
+  - answer `ask_report` prompts from Telegram without bypassing the original Relief flow
+  - approve or deny pending `execute_command` requests remotely
+  - send voice messages, review the recognized text, and forward it only after confirmation
+  - upload documents that are staged locally and linked back to the active remote session
+  - request `/pending`, `/resume`, `/status`, and `/diff` directly from a phone
+  - receive diff summaries and the full patch artifact in one Telegram document message when a git diff is available
+
+**Telegram settings:**
+
+- `reliefpilot.telegramBotAutoStart` — automatically start the bot with VS Code
+- `reliefpilot.telegramAuthorizedUserIds` — list of Telegram user IDs allowed to control Relief Pilot
+- `reliefpilot.telegramAskReportDeliveryMode` — choose whether `ask_report` is delivered as a message, document, or auto-selected format
+- `reliefpilot.telegramNotificationMode` — choose whether Telegram auto-pushes only actionable/failure events or all informational updates too
+- `reliefpilot.commandConfirmationMode` — approval routing mode for `execute_command`
+
+**Phone-first commands:**
+
+- `/status` — bot health plus the active remote session, next pending item, and latest diff snapshot
+- `/pending` — the next unresolved remote inbox item
+- `/resume` — choose which recent remote session to continue
+- `/diff` — send the latest diff summary as the patch caption plus the full patch artifact in one Telegram message when available
+- `/summary` — request a short catch-up summary from the remote inbox using the current notification preference
+
+**Artifact notes:**
+
+- Uploaded files are staged in a temporary workspace-scoped directory before your workflow consumes them.
+- Diff artifacts are generated from the active workspace git worktree and are sent immediately with the summary attached as the same message caption.
+- If artifact delivery fails, Telegram receives a clear failure message instead of silently dropping the file.
+
 ### Halt for Feedback
 
 - Pause tool execution globally and put Copilot interactions on hold while you decide what to do next.
@@ -152,13 +186,13 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    - PRE-FLIGHT CHECK (mandatory before any search): "Do I know the absolute path or already have the contents?" If YES — cancel the search immediately.
 
    - REPOSITORY DISCOVERY (when path/name is unknown): Use the `ripgrep` tool (structured search). Prefer `ripgrep` over any "semantic" tooling.
-    - Example (search in Obsidian developer docs):
-      - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"] }
-    - Example (search in source code):
-      - ripgrep: { pattern: "class ActionHandler", paths: ["src"], caseMode: "smart", glob: ["*.ts"] }
-    - Example (list matching files only):
-      - Run `ripgrep` and collect unique `matches[].path` from the results:
-        - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"], contextLines: 0 }
+   - Example (search in Obsidian developer docs):
+     - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"] }
+   - Example (search in source code):
+     - ripgrep: { pattern: "class ActionHandler", paths: ["src"], caseMode: "smart", glob: ["*.ts"] }
+   - Example (list matching files only):
+     - Run `ripgrep` and collect unique `matches[].path` from the results:
+       - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"], contextLines: 0 }
    - ALLOWED: `file_search` is permitted ONLY to discover filenames/paths. It must NEVER be used when an absolute path is already known.
 
    ## Tool Error Interpretation
@@ -214,7 +248,6 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    ```
 
 4. Stock up on tokens — you'll need them for maximum comfort:
-
    - [context7.com/dashboard](https://context7.com/dashboard)
    - [Google API Key](https://support.google.com/googleapi/answer/6158862?hl=en) (free 100 req/day)
    - [Google Search Engine ID](https://support.google.com/programmable-search/answer/12499034?hl=en)

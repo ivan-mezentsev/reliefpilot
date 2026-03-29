@@ -161,6 +161,15 @@
           ],
           "markdownDescription": "Controls how `ask_report` is delivered to Telegram. `auto` = send short reports as a Telegram message and long reports as a Markdown file, `message` = always send a truncated Telegram message, `document` = always send a Markdown file attachment."
         },
+        "reliefpilot.telegramNotificationMode": {
+          "type": "string",
+          "default": "actionable",
+          "enum": [
+            "actionable",
+            "all"
+          ],
+          "markdownDescription": "Controls how much Telegram pushes automatically. `actionable` = send only blocking requests and failures automatically while keeping informational updates for `/summary`, `all` = also send informational settlements automatically."
+        },
         "reliefpilot.confirmNonDestructiveCommands": {
           "type": "boolean",
           "default": false,
