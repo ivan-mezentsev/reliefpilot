@@ -29,10 +29,11 @@ Can you check the docs and explain how the project works? #ask_report
 - Authorized Telegram users can:
   - send text messages that continue the active remote session or start a new task when no session is active
   - answer `ask_report` prompts from Telegram without bypassing the original Relief flow
+  - receive a short diff summary plus the current `.patch` file during `ask_report` delivery when that same request already produced git changes
   - approve or deny pending `execute_command` requests remotely
   - send voice messages, review the recognized text, and forward it only after confirmation
   - upload documents that are staged locally and linked back to the active remote session
-  - request `/pending`, `/resume`, `/status`, and `/diff` directly from a phone
+  - request `/pending`, `/blockers`, `/errors`, `/resume`, `/status`, `/diff`, `/patch`, `/summary`, `/mode`, and `/commands` directly from a phone
   - receive diff summaries and the full patch artifact in one Telegram document message when a git diff is available
 
 **Telegram settings:**
@@ -47,13 +48,19 @@ Can you check the docs and explain how the project works? #ask_report
 
 - `/status` — bot health plus the active remote session, next pending item, and latest diff snapshot
 - `/pending` — the next unresolved remote inbox item
+- `/blockers` — recent blocking or failed remote items for the active session
+- `/errors` — recent failure items only, when you want failure-focused triage
 - `/resume` — choose which recent remote session to continue
 - `/diff` — send the latest diff summary as the patch caption plus the full patch artifact in one Telegram message when available
+- `/patch` — alias for `/diff` when you want the current git patch file explicitly
 - `/summary` — request a short catch-up summary from the remote inbox using the current notification preference
+- `/mode` — show or change Telegram notification mode (`actionable` or `all`)
+- `/commands` — show the in-bot command cheat sheet
 
 **Artifact notes:**
 
 - Uploaded files are staged in a temporary workspace-scoped directory before your workflow consumes them.
+- When an `ask_report` is delivered for a session that already has git changes, Telegram also receives the current `.patch` file with a short summary in the caption.
 - Diff artifacts are generated from the active workspace git worktree and are sent immediately with the summary attached as the same message caption.
 - If artifact delivery fails, Telegram receives a clear failure message instead of silently dropping the file.
 

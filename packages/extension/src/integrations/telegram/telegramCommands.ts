@@ -1,15 +1,122 @@
-import type { Bot } from 'grammy'
+import * as vscode from 'vscode'
+import type { Bot, Context } from 'grammy'
 import { InlineKeyboard } from 'grammy'
-import { parseTelegramActionCallback } from './messageBridge'
+import { parseTelegramActionCallback, parseTelegramNotificationMode } from './messageBridge'
 import type { RemoteInboxItem, RemoteSession, StoredDiffSnapshot } from './remoteSessionRegistry'
 import { bindOwner, createAuthMiddleware, hasOwner, isAuthorized } from './telegramAuth'
 import type { TelegramBotService } from './telegramBotService'
 
+const TELEGRAM_COMMAND_MENU = [
+  { command: 'start', description: 'Initialize the bot' },
+  { command: 'status', description: 'Check bot and Relief status' },
+  { command: 'pending', description: 'Show the next pending inbox item' },
+  { command: 'blockers', description: 'Show recent blocking items' },
+  { command: 'errors', description: 'Show recent failures only' },
+  { command: 'resume', description: 'Resume a recent remote session' },
+  { command: 'diff', description: 'Send the latest diff summary and patch' },
+  { command: 'patch', description: 'Alias for diff' },
+  { command: 'summary', description: 'Show recent inbox catch-up items' },
+  { command: 'mode', description: 'View or change notification mode' },
+  { command: 'help', description: 'Show command help' },
+  { command: 'commands', description: 'Alias for help' },
+] as const
+
+export function getTelegramBotCommandMenu(): Array<{ command: string; description: string }> {
+  return TELEGRAM_COMMAND_MENU.map((entry) => ({ ...entry }))
+}
+
+export async function syncTelegramCommandMenu(bot: Bot): Promise<void> {
+  await bot.api.setMyCommands(getTelegramBotCommandMenu())
+}
+
 export function registerCommands(bot: Bot, botService: TelegramBotService): void {
+  const sendDiffCommand = async (ctx: Context): Promise<void> => {
+    const userId = ctx.from?.id
+    const chatId = ctx.chat?.id
+    const registry = botService.getRemoteSessionRegistry()
+    const diffProvider = botService.getDiffProvider()
+    const bridge = botService.getMessageBridge()
+
+    if (typeof userId !== 'number' || typeof chatId !== 'number') {
+      await ctx.reply('Unable to determine the current Telegram chat.')
+      return
+    }
+
+    if (!registry || !diffProvider || !bridge) {
+      await ctx.reply('Diff workflow is unavailable right now.')
+      return
+    }
+
+    const session = registry.getSelectedSession() ?? registry.listRecentSessions(1)[0]
+    if (!session) {
+      await ctx.reply('No remote session is active yet. Resume a task or send a new request first.')
+      return
+    }
+
+    if (!session.workspacePath) {
+      await ctx.reply(`No workspace is linked to "${session.title}" yet, so I cannot build a git diff.`)
+      return
+    }
+
+    await ctx.reply(`🧾 Capturing latest git patch for: ${session.title}`)
+
+    const snapshot = await diffProvider.captureLatestDiff(session.sessionId, session.workspacePath)
+    registry.recordDiffSnapshot({
+      sessionId: session.sessionId,
+      sessionTitle: session.title,
+      workspacePath: session.workspacePath,
+      snapshot: {
+        diffId: snapshot.diffId,
+        sessionId: session.sessionId,
+        source: snapshot.source,
+        summary: snapshot.summary,
+        fullArtifactPath: snapshot.fullArtifactPath,
+        fingerprint: snapshot.fingerprint,
+        createdAt: snapshot.createdAt,
+        status: snapshot.status,
+      },
+    })
+
+    await bridge.sendDiffSnapshotToChat({
+      chatId,
+      userId,
+      sessionId: session.sessionId,
+      sessionTitle: session.title,
+      summary: snapshot.summary,
+      artifactPath: snapshot.fullArtifactPath,
+    })
+  }
+
+  const sendHelpCommand = async (ctx: Context): Promise<void> => {
+    await syncTelegramCommandMenu(bot).catch(() => undefined)
+
+    await ctx.reply(
+      'Available commands:\n' +
+      '/start - Initialize bot\n' +
+      '/status - Check bot and Relief status\n' +
+      '/pending - Show the next pending remote inbox item\n' +
+      '/blockers - Show recent blocking or failed remote items\n' +
+      '/errors - Show recent failure items only\n' +
+      '/resume - Pick the remote session to continue\n' +
+      '/diff - Send the latest diff summary and full patch if available\n' +
+      '/patch - Alias for /diff with the latest git patch file\n' +
+      '/summary - Show a short catch-up summary from the remote inbox\n' +
+      '/mode - Show or update Telegram notification mode (all/actionable)\n' +
+      '/help - Show this help\n' +
+      '/commands - Alias for /help\n\n' +
+      'Send text to continue the active remote session or start a new task.\n' +
+      'Send a voice message to transcribe it before forwarding.\n' +
+      'Send a document to stage it for Relief workflows.\n' +
+      'When ask_report arrives after code changes, Telegram also receives a short summary plus the current git patch file.',
+    )
+  }
+
   // /start — available to everyone (for owner binding), but with special handling.
   bot.command('start', async (ctx) => {
     const userId = ctx.from?.id
     if (!userId) return
+
+    await syncTelegramCommandMenu(bot).catch(() => undefined)
 
     if (!hasOwner()) {
       const keyboard = new InlineKeyboard()
@@ -172,60 +279,11 @@ export function registerCommands(bot: Bot, botService: TelegramBotService): void
   })
 
   bot.command('diff', authMiddleware, async (ctx) => {
-    const userId = ctx.from?.id
-    const chatId = ctx.chat?.id
-    const registry = botService.getRemoteSessionRegistry()
-    const diffProvider = botService.getDiffProvider()
-    const bridge = botService.getMessageBridge()
+    await sendDiffCommand(ctx)
+  })
 
-    if (typeof userId !== 'number' || typeof chatId !== 'number') {
-      await ctx.reply('Unable to determine the current Telegram chat.')
-      return
-    }
-
-    if (!registry || !diffProvider || !bridge) {
-      await ctx.reply('Diff workflow is unavailable right now.')
-      return
-    }
-
-    const session = registry.getSelectedSession() ?? registry.listRecentSessions(1)[0]
-    if (!session) {
-      await ctx.reply('No remote session is active yet. Resume a task or send a new request first.')
-      return
-    }
-
-    if (!session.workspacePath) {
-      await ctx.reply(`No workspace is linked to "${session.title}" yet, so I cannot build a git diff.`)
-      return
-    }
-
-    await ctx.reply(`🧾 Capturing latest diff for: ${session.title}`)
-
-    const snapshot = await diffProvider.captureLatestDiff(session.sessionId, session.workspacePath)
-    registry.recordDiffSnapshot({
-      sessionId: session.sessionId,
-      sessionTitle: session.title,
-      workspacePath: session.workspacePath,
-      snapshot: {
-        diffId: snapshot.diffId,
-        sessionId: session.sessionId,
-        source: snapshot.source,
-        summary: snapshot.summary,
-        fullArtifactPath: snapshot.fullArtifactPath,
-        fingerprint: snapshot.fingerprint,
-        createdAt: snapshot.createdAt,
-        status: snapshot.status,
-      },
-    })
-
-    await bridge.sendDiffSnapshotToChat({
-      chatId,
-      userId,
-      sessionId: session.sessionId,
-      sessionTitle: session.title,
-      summary: snapshot.summary,
-      artifactPath: snapshot.fullArtifactPath,
-    })
+  bot.command('patch', authMiddleware, async (ctx) => {
+    await sendDiffCommand(ctx)
   })
 
   bot.command('summary', authMiddleware, async (ctx) => {
@@ -246,21 +304,80 @@ export function registerCommands(bot: Bot, botService: TelegramBotService): void
     await ctx.reply(renderCatchUpSummary(activeSession, items, actionableOnly))
   })
 
+  bot.command('blockers', authMiddleware, async (ctx) => {
+    const registry = botService.getRemoteSessionRegistry()
+    const activeSession = registry?.getSelectedSession()
+    const items = registry?.listRecentInboxItems({
+      sessionId: activeSession?.sessionId,
+      limit: 10,
+    }) ?? []
+
+    const blockers = items.filter(isBlockingInboxItem).slice(0, 5)
+    if (blockers.length === 0) {
+      await ctx.reply(`✅ No current blockers${activeSession ? ` for ${activeSession.title}` : ''}.`)
+      return
+    }
+
+    await ctx.reply(renderBlockersSummary(activeSession, blockers))
+  })
+
+  bot.command('errors', authMiddleware, async (ctx) => {
+    const registry = botService.getRemoteSessionRegistry()
+    const activeSession = registry?.getSelectedSession()
+    const items = registry?.listRecentInboxItems({
+      sessionId: activeSession?.sessionId,
+      limit: 10,
+    }) ?? []
+
+    const errors = items.filter((item) => item.status === 'failed').slice(0, 5)
+    if (errors.length === 0) {
+      await ctx.reply(`✅ No recent failure items${activeSession ? ` for ${activeSession.title}` : ''}.`)
+      return
+    }
+
+    await ctx.reply(renderFailureSummary(activeSession, errors))
+  })
+
+  bot.command('mode', authMiddleware, async (ctx) => {
+    const registry = botService.getRemoteSessionRegistry()
+    if (!registry) {
+      await ctx.reply('Notification mode control is unavailable right now.')
+      return
+    }
+
+    const rawArgument = extractCommandArgument(ctx.message?.text)
+    if (!rawArgument) {
+      await ctx.reply(
+        `🔕 Current Telegram notification mode: ${registry.getNotificationMode()}\n` +
+        'Usage: /mode actionable or /mode all',
+      )
+      return
+    }
+
+    const normalizedArgument = rawArgument.trim().toLowerCase()
+    if (normalizedArgument !== 'actionable' && normalizedArgument !== 'all') {
+      await ctx.reply('Unsupported mode. Use /mode actionable or /mode all.')
+      return
+    }
+
+    const nextMode = parseTelegramNotificationMode(normalizedArgument)
+    await vscode.workspace.getConfiguration('reliefpilot').update(
+      'telegramNotificationMode',
+      nextMode,
+      vscode.ConfigurationTarget.Global,
+    )
+    registry.setNotificationMode(nextMode)
+
+    await ctx.reply(`🔕 Telegram notification mode updated to: ${nextMode}`)
+  })
+
   // /help — authorized users only.
   bot.command('help', authMiddleware, async (ctx) => {
-    await ctx.reply(
-      'Available commands:\n' +
-      '/start - Initialize bot\n' +
-      '/status - Check bot and Relief status\n' +
-      '/pending - Show the next pending remote inbox item\n' +
-      '/resume - Pick the remote session to continue\n' +
-      '/diff - Send the latest diff summary and full patch if available\n' +
-      '/summary - Show a short catch-up summary from the remote inbox\n' +
-      '/help - Show this help\n\n' +
-      'Send text to continue the active remote session or start a new task.\n' +
-      'Send a voice message to transcribe it before forwarding.\n' +
-      'Send a document to stage it for Relief workflows.',
-    )
+    await sendHelpCommand(ctx)
+  })
+
+  bot.command('commands', authMiddleware, async (ctx) => {
+    await sendHelpCommand(ctx)
   })
 }
 
@@ -327,6 +444,47 @@ function renderCatchUpSummary(
   })
 
   return lines.join('\n')
+}
+
+function renderBlockersSummary(activeSession: RemoteSession | undefined, items: RemoteInboxItem[]): string {
+  const lines = [
+    `🚨 Blockers${activeSession ? ` · ${activeSession.title}` : ''}`,
+    '',
+  ]
+
+  items.forEach((item) => {
+    lines.push(`- [${item.status}] ${item.kind} · ${item.title}`)
+    lines.push(`  ${truncate(item.summary, 120)}`)
+  })
+
+  return lines.join('\n')
+}
+
+function renderFailureSummary(activeSession: RemoteSession | undefined, items: RemoteInboxItem[]): string {
+  const lines = [
+    `❌ Recent failures${activeSession ? ` · ${activeSession.title}` : ''}`,
+    '',
+  ]
+
+  items.forEach((item) => {
+    lines.push(`- ${item.kind} · ${item.title}`)
+    lines.push(`  ${truncate(item.summary, 120)}`)
+  })
+
+  return lines.join('\n')
+}
+
+function isBlockingInboxItem(item: RemoteInboxItem): boolean {
+  return item.status === 'pending' || item.status === 'failed'
+}
+
+function extractCommandArgument(text: string | undefined): string {
+  if (!text) {
+    return ''
+  }
+
+  const parts = text.trim().split(/\s+/)
+  return parts.slice(1).join(' ').trim()
 }
 
 function formatRelativeTime(date: Date): string {

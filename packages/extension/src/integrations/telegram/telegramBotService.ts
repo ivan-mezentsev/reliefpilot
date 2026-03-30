@@ -7,7 +7,7 @@ import type { MediaTransfer } from './mediaStore'
 import { TelegramMediaStore } from './mediaStore'
 import { MessageBridge } from './messageBridge'
 import type { RemoteSessionRegistry } from './remoteSessionRegistry'
-import { registerCommands } from './telegramCommands'
+import { registerCommands, syncTelegramCommandMenu } from './telegramCommands'
 
 export type BotStatus = 'stopped' | 'starting' | 'connected' | 'reconnecting' | 'error'
 
@@ -262,6 +262,7 @@ export class TelegramBotService {
               lastError: null,
             })
             this.outputChannel.appendLine(`Telegram bot connected and polling as @${botInfo.username}.`)
+            void this.publishCommandMenu()
           },
         })
 
@@ -351,6 +352,20 @@ export class TelegramBotService {
 
   private async sleep(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  private async publishCommandMenu(): Promise<void> {
+    if (!this.bot) {
+      return
+    }
+
+    try {
+      await syncTelegramCommandMenu(this.bot)
+      this.outputChannel.appendLine('Telegram command menu published successfully.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.outputChannel.appendLine(`Failed to publish Telegram command menu: ${message}`)
+    }
   }
 
   public dispose(): void {

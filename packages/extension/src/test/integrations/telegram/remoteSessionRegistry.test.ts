@@ -118,6 +118,62 @@ suite('RemoteSessionRegistry', () => {
     assert.strictEqual(updated?.summary, 'Artifact delivery failed')
   })
 
+  test('supersedes prior diff summary items when a newer snapshot is recorded', () => {
+    const registry = new RemoteSessionRegistry()
+
+    const session = registry.registerRemoteItem({
+      kind: 'status',
+      title: 'Diff supersede task',
+      summary: 'Tracking diff state',
+      status: 'informational',
+      sessionTitle: 'workspace · Diff supersede task',
+      workspacePath: '/tmp/workspace',
+    }).session
+
+    registry.recordDiffSnapshot({
+      sessionId: session.sessionId,
+      sessionTitle: session.title,
+      workspacePath: session.workspacePath,
+      snapshot: {
+        diffId: 'diff-1',
+        sessionId: session.sessionId,
+        source: 'git-worktree',
+        summary: 'First diff',
+        fullArtifactPath: '/tmp/workspace/first.patch',
+        fingerprint: 'fingerprint-1',
+        createdAt: new Date('2025-01-01T00:00:00.000Z'),
+        status: 'ready',
+      },
+    })
+
+    registry.recordDiffSnapshot({
+      sessionId: session.sessionId,
+      sessionTitle: session.title,
+      workspacePath: session.workspacePath,
+      snapshot: {
+        diffId: 'diff-2',
+        sessionId: session.sessionId,
+        source: 'git-worktree',
+        summary: 'Second diff',
+        fullArtifactPath: '/tmp/workspace/second.patch',
+        fingerprint: 'fingerprint-2',
+        createdAt: new Date('2025-01-01T00:01:00.000Z'),
+        status: 'ready',
+      },
+    })
+
+    const diffItems = registry
+      .listRecentInboxItems({ sessionId: session.sessionId, limit: 10 })
+      .filter((item) => item.kind === 'diff-summary')
+
+    assert.strictEqual(diffItems.length, 2)
+    const statuses = diffItems.map((item) => item.status).sort()
+
+    assert.deepStrictEqual(statuses, ['informational', 'superseded'])
+    assert.ok(diffItems.some((item) => item.summary === 'Second diff'))
+    assert.ok(diffItems.some((item) => item.summary === 'Superseded by a newer diff snapshot.'))
+  })
+
   test('stores notification mode and returns filtered catch-up items', () => {
     const registry = new RemoteSessionRegistry()
     registry.setNotificationMode('all')

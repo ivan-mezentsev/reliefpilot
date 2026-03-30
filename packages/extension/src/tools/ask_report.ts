@@ -68,8 +68,13 @@ type PendingAskReportResolver = {
     resolveExternally: (result: ExternalAskReportResolution) => boolean
 }
 
+type PendingAskReportSession = {
+    settle: (result: AskUserResult) => boolean
+}
+
 let activeAskReportPanel: vscode.WebviewPanel | undefined
 const pendingAskReportResolvers = new Map<string, PendingAskReportResolver>()
+const pendingAskReportSessions = new Map<string, PendingAskReportSession>()
 
 export function getActiveAskReportPanel(): vscode.WebviewPanel | undefined {
     return activeAskReportPanel
@@ -88,6 +93,40 @@ export function resolveAskReportFromTelegram(reportId: string, value: string): '
     })
 
     return resolved ? 'resolved' : 'already-settled'
+}
+
+export function cancelAllPendingAskReports(reason: string = 'VS Code was reloaded before ask_report completed.'): number {
+    let cancelled = 0
+
+    for (const session of [...pendingAskReportSessions.values()]) {
+        const didCancel = session.settle({
+            decision: 'Cancel',
+            value: reason,
+            source: 'webview',
+        })
+
+        if (didCancel) {
+            cancelled += 1
+        }
+    }
+
+    return cancelled
+}
+
+export function buildAskReportToolResultText(result: AskUserResult): string {
+    if (result.timeout === true) {
+        return 'User did not reply: Timeout occurred.'
+    }
+
+    if (result.decision === 'Cancel' && (!result.value || result.value.trim() === '')) {
+        return 'User replied with empty input.'
+    }
+
+    if (result.decision === 'Cancel') {
+        return `User cancelled: ${result.value}`
+    }
+
+    return `User replied: ${result.value}`
 }
 
 export async function askReport(opts: AskReportOptions): Promise<AskUserResult> {
@@ -711,6 +750,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
     // Return a promise that resolves based on webview messages or panel disposal
     return await new Promise<AskUserResult>((resolve) => {
         let settled = false
+        const pendingSessionId = opts.historyId ?? randomUUID()
         const voiceController = createWebviewVoiceInputController({
             panel,
             enableVoiceInput: voiceInputEnabled,
@@ -718,25 +758,33 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                 void panel.webview.postMessage({ type: 'activateCustom' })
             },
         })
-        const finalize = (res: AskUserResult) => {
-            if (!settled) {
-                settled = true
-                if (opts.historyId) {
-                    pendingAskReportResolvers.delete(opts.historyId)
-                    _onAskReportSettled.fire({
-                        id: opts.historyId,
-                        topicName: title,
-                        decision: res.decision,
-                        value: res.value,
-                        timeout: res.timeout,
-                        source: res.source ?? 'webview',
-                    })
-                }
-                voiceController.dispose()
-                try { panel.dispose() } catch { /* noop */ }
-                resolve(res)
+        const finalize = (res: AskUserResult): boolean => {
+            if (settled) {
+                return false
             }
+
+            settled = true
+            pendingAskReportSessions.delete(pendingSessionId)
+            if (opts.historyId) {
+                pendingAskReportResolvers.delete(opts.historyId)
+                _onAskReportSettled.fire({
+                    id: opts.historyId,
+                    topicName: title,
+                    decision: res.decision,
+                    value: res.value,
+                    timeout: res.timeout,
+                    source: res.source ?? 'webview',
+                })
+            }
+            voiceController.dispose()
+            try { panel.dispose() } catch { /* noop */ }
+            resolve(res)
+            return true
         }
+
+        pendingAskReportSessions.set(pendingSessionId, {
+            settle: finalize,
+        })
 
         if (opts.historyId && !opts.readOnly) {
             pendingAskReportResolvers.set(opts.historyId, {
@@ -745,12 +793,11 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
                         return false
                     }
 
-                    finalize({
+                    return finalize({
                         decision: result.decision,
                         value: result.value,
                         source: result.source,
                     })
-                    return true
                 },
             })
         }
@@ -819,6 +866,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         disposables.push(
             panel.onDidDispose(() => {
                 voiceController.dispose()
+                pendingAskReportSessions.delete(pendingSessionId)
                 if (opts.historyId) {
                     pendingAskReportResolvers.delete(opts.historyId)
                 }
@@ -917,14 +965,7 @@ export class AskReportLanguageModelTool
                 askReportHistory.updateResult(uid, { decision: result.decision, value: result.value, timeout: result.timeout })
             } catch { }
 
-            let text: string
-            if (result.timeout === true) {
-                text = 'User did not reply: Timeout occurred.'
-            } else if (result.decision === 'Cancel' && (!result.value || result.value.trim() === '')) {
-                text = 'User replied with empty input.'
-            } else {
-                text = `User replied: ${result.value}`
-            }
+            const text = buildAskReportToolResultText(result)
 
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(text),

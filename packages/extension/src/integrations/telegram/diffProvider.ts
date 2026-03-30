@@ -116,6 +116,7 @@ export function summarizeGitDiff(shortStat: string, nameOnly: string): string {
     const visibleFiles = files.slice(0, 3).map((fileName) => path.basename(fileName))
     const suffix = files.length > visibleFiles.length ? ` +${files.length - visibleFiles.length} more` : ''
     lines.push(`Files: ${visibleFiles.join(', ')}${suffix}`)
+    lines.push(`Impact: ${buildDiffImpactSummary(files)}`)
   }
 
   if (lines.length === 0) {
@@ -123,6 +124,84 @@ export function summarizeGitDiff(shortStat: string, nameOnly: string): string {
   }
 
   return lines.join('\n')
+}
+
+function buildDiffImpactSummary(files: string[]): string {
+  const categories = new Set(files.map(classifyChangedFile))
+
+  if (categories.size === 1) {
+    const [category] = [...categories]
+    switch (category) {
+      case 'docs':
+        return 'Documentation-focused changes; behavior is unlikely to change directly.'
+      case 'tests':
+        return 'Test-only changes; likely validation or coverage updates.'
+      case 'config':
+        return 'Configuration/tooling changes; build or runtime setup may be affected.'
+      case 'source':
+      default:
+        return 'Application code changed; behavior, APIs, or user-visible flow may be affected.'
+    }
+  }
+
+  if (categories.has('source') && categories.has('tests')) {
+    return 'Source code and tests changed together; behavior likely shifted with matching coverage updates.'
+  }
+
+  if (categories.has('source') && categories.has('config')) {
+    return 'Source code and configuration changed together; behavior and setup may both be affected.'
+  }
+
+  if (categories.has('docs') && categories.size === 2 && categories.has('source')) {
+    return 'Code and documentation changed together; implementation likely changed and docs were updated to match.'
+  }
+
+  if (categories.has('docs') && categories.size === 2 && categories.has('tests')) {
+    return 'Tests and documentation changed together; validation or guidance may have been refined.'
+  }
+
+  return 'Changes span multiple areas of the workspace; review the full patch for scope and downstream impact.'
+}
+
+function classifyChangedFile(filePath: string): 'docs' | 'tests' | 'config' | 'source' {
+  const normalized = filePath.trim().toLowerCase()
+  const baseName = path.basename(normalized)
+
+  if (
+    normalized.includes('/docs/')
+    || baseName.endsWith('.md')
+    || baseName.endsWith('.mdx')
+    || baseName === 'readme'
+    || baseName.startsWith('readme.')
+  ) {
+    return 'docs'
+  }
+
+  if (
+    normalized.includes('/test/')
+    || normalized.includes('/tests/')
+    || normalized.includes('.test.')
+    || normalized.includes('.spec.')
+  ) {
+    return 'tests'
+  }
+
+  if (
+    baseName === 'package.json'
+    || baseName.endsWith('.json')
+    || baseName.endsWith('.yaml')
+    || baseName.endsWith('.yml')
+    || baseName.endsWith('.toml')
+    || baseName.endsWith('.ini')
+    || baseName.endsWith('.env')
+    || normalized.includes('config')
+    || normalized.includes('webpack')
+    || normalized.includes('tsconfig')
+  ) {
+    return 'config'
+  }
+
+  return 'source'
 }
 
 function sanitizeWorkspaceName(workspacePath: string): string {

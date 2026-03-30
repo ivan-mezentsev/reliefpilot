@@ -104,6 +104,27 @@ class AskReportHistory {
         void this.saveToStorage()
     }
 
+    markIncompleteEntriesCancelled(value: string): number {
+        let updated = 0
+        for (const entry of this.entries) {
+            if (entry.result) {
+                continue
+            }
+
+            entry.result = {
+                decision: 'Cancel',
+                value,
+            }
+            updated += 1
+        }
+
+        if (updated > 0) {
+            void this.saveToStorage()
+        }
+
+        return updated
+    }
+
     list(): AskReportHistoryEntry[] {
         return [...this.entries]
     }

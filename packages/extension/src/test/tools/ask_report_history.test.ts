@@ -28,4 +28,25 @@ suite('Ask Report History ring buffer', function () {
         // Expect T5, T4, T3
         assert.deepStrictEqual(items.map((e) => e.topic), ['T5', 'T4', 'T3'])
     })
+
+    test('Marks incomplete entries as cancelled after reload recovery', async () => {
+        const pending = askReportHistory.add({ topic: 'Pending', markdown: 'Still running' })
+        const settled = askReportHistory.add({
+            topic: 'Settled',
+            markdown: 'Already done',
+            result: { decision: 'Submit', value: 'Done' },
+        })
+
+        const updated = askReportHistory.markIncompleteEntriesCancelled('Reloaded before completion')
+
+        assert.strictEqual(updated >= 1, true)
+        assert.deepStrictEqual(askReportHistory.getById(pending.id)?.result, {
+            decision: 'Cancel',
+            value: 'Reloaded before completion',
+        })
+        assert.deepStrictEqual(askReportHistory.getById(settled.id)?.result, {
+            decision: 'Submit',
+            value: 'Done',
+        })
+    })
 })

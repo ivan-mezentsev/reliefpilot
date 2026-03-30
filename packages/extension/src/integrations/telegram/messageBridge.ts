@@ -237,6 +237,7 @@ export class MessageBridge {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         this.outputChannel.appendLine(`[Telegram] Error forwarding to Relief: ${message}`)
+        this.registerFailureForSelectedSession('Telegram request failed', message)
         await ctx.reply(`❌ Error: ${message}`)
       }
     })
@@ -685,6 +686,7 @@ export class MessageBridge {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.outputChannel.appendLine(`[Telegram] Voice transcription failed: ${message}`)
+      this.registerFailureForSelectedSession('Voice request failed', message)
       await ctx.reply(`❌ Voice request could not be processed: ${message}`)
     }
   }
@@ -732,6 +734,7 @@ export class MessageBridge {
           `Failed to forward recognized text to Relief.\n\n${message}`,
         )
       }
+      this.registerFailureForSelectedSession('Voice request forwarding failed', message)
       await ctx.reply(`❌ Failed to forward recognized text: ${message}`)
     }
   }
@@ -759,7 +762,9 @@ export class MessageBridge {
       fileSize: document.file_size,
     })
     if (!validation.ok) {
-      await ctx.reply(`❌ ${validation.message}`)
+      const message = validation.message ?? 'Telegram file validation failed.'
+      this.registerFailureForSelectedSession('Telegram file validation failed', message)
+      await ctx.reply(`❌ ${message}`)
       return
     }
 
@@ -798,6 +803,7 @@ export class MessageBridge {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.outputChannel.appendLine(`[Telegram] File staging failed: ${message}`)
+      this.registerFailureForSelectedSession('Telegram artifact upload failed', message)
       await ctx.reply(`❌ File upload failed: ${message}`)
     }
   }
@@ -1156,6 +1162,23 @@ export class MessageBridge {
     }
 
     return topic
+  }
+
+  private registerFailureForSelectedSession(title: string, summary: string): void {
+    if (!this.remoteSessionRegistry) {
+      return
+    }
+
+    const activeSession = this.remoteSessionRegistry.getSelectedSession()
+    this.remoteSessionRegistry.registerRemoteItem({
+      kind: 'failure',
+      title,
+      summary,
+      status: 'failed',
+      sessionId: activeSession?.sessionId,
+      sessionTitle: activeSession?.title ?? this.getRemoteSessionTitle(title),
+      workspacePath: activeSession?.workspacePath ?? this.getWorkspacePath(),
+    })
   }
 
   private buildSessionAwarePrompt(text: string): { prompt: string; notice?: string } {

@@ -10,7 +10,17 @@ suite('DiffProvider', () => {
 
     assert.match(summary, /2 files changed/)
     assert.match(summary, /feature.ts/)
+    assert.match(summary, /Impact: Source code and tests changed together/i)
     assert.doesNotMatch(summary, /src\/feature.ts\nsrc\/feature.test.ts/)
+  })
+
+  test('summarizeGitDiff explains documentation-only changes clearly', () => {
+    const summary = summarizeGitDiff(
+      '1 file changed, 8 insertions(+)',
+      'docs/telegram.md',
+    )
+
+    assert.match(summary, /Impact: Documentation-focused changes/i)
   })
 
   test('captureLatestDiff reports unavailable when no workspace is associated', async () => {

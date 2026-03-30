@@ -344,6 +344,11 @@ export class RemoteSessionRegistry {
     }
 
     this.diffSnapshots.set(session.sessionId, snapshot)
+    this.supersedeSessionItems(
+      session.sessionId,
+      (item) => item.kind === 'diff-summary' && item.status !== 'superseded',
+      'Superseded by a newer diff snapshot.',
+    )
 
     return this.registerRemoteItem({
       kind: 'diff-summary',
@@ -444,6 +449,22 @@ export class RemoteSessionRegistry {
     session.lastActivityAt = new Date()
     session.status = 'active'
     this.selectedSessionId = sessionId
+  }
+
+  private supersedeSessionItems(
+    sessionId: string,
+    predicate: (item: RemoteInboxItem) => boolean,
+    summary: string,
+  ): void {
+    for (const item of this.inboxItems.values()) {
+      if (item.sessionId !== sessionId || !predicate(item)) {
+        continue
+      }
+
+      item.status = 'superseded'
+      item.summary = summarizeForInbox(summary)
+      item.resolvedAt = new Date()
+    }
   }
 
   private buildWorkspaceSessionId(workspacePath: string | null): string {

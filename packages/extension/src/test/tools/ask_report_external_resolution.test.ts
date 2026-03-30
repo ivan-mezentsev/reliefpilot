@@ -1,5 +1,5 @@
 import * as assert from 'assert'
-import { askReport, getActiveAskReportPanel, resolveAskReportFromTelegram } from '../../tools/ask_report'
+import { askReport, cancelAllPendingAskReports, getActiveAskReportPanel, resolveAskReportFromTelegram } from '../../tools/ask_report'
 
 suite('Ask Report external Telegram resolution', function () {
     this.timeout(10000)
@@ -39,5 +39,27 @@ suite('Ask Report external Telegram resolution', function () {
 
         const result = await resultPromise
         assert.deepStrictEqual(result, { decision: 'Submit', value: 'Ship it', source: 'telegram' })
+    })
+
+    test('cancels pending ask_report sessions during reload cleanup', async () => {
+        const reportId = `telegram-reload-${Date.now()}`
+        const resultPromise = askReport({
+            title: 'Telegram reload cleanup',
+            markdown: 'This should be cancelled on reload',
+            historyId: reportId,
+        })
+
+        const panel = getActiveAskReportPanel()
+        assert.ok(panel, 'Expected ask_report panel to be active')
+
+        const cancelled = cancelAllPendingAskReports('VS Code was reloaded before ask_report completed.')
+        assert.strictEqual(cancelled >= 1, true)
+
+        const result = await resultPromise
+        assert.deepStrictEqual(result, {
+            decision: 'Cancel',
+            value: 'VS Code was reloaded before ask_report completed.',
+            source: 'webview',
+        })
     })
 })

@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { ApprovalCoordinator } from './integrations/telegram/approvalCoordinator';
+import { DiffProvider } from './integrations/telegram/diffProvider';
 import { TelegramMediaStore } from './integrations/telegram/mediaStore';
 import { parseTelegramNotificationMode } from './integrations/telegram/messageBridge';
+import { RemoteSessionRegistry } from './integrations/telegram/remoteSessionRegistry';
 import { TelegramBotService } from './integrations/telegram/telegramBotService';
 import { CREATE_SPECS_MODE_COMMAND, registerSpecsModeCommand } from './specsMode';
 import { AiFetchUrlLanguageModelTool } from './tools/ai_fetch_url';
-import { AskReportLanguageModelTool, onAskReportCreated, onAskReportSettled, openOrFocusAskReportById } from './tools/ask_report';
+import { AskReportLanguageModelTool, cancelAllPendingAskReports, onAskReportCreated, onAskReportSettled, openOrFocusAskReportById } from './tools/ask_report';
 import { CodeCheckerLanguageModelTool } from './tools/code_checker';
 import { Context7GetLibraryDocsTool } from './tools/context7_get_library_docs';
 import { Context7ResolveLibraryIdTool } from './tools/context7_resolve_library_id';
@@ -58,8 +60,6 @@ import { selectInputDevice } from './utils/speechToText';
 import { statusBarActivity } from './utils/statusBar';
 import { hasTelegramBotToken, initTelegramAuth, setupOrUpdateTelegramBotToken } from './utils/telegram_auth';
 import { toggleActiveVoiceInput } from './utils/voiceInputCommand';
-import { DiffProvider } from './integrations/telegram/diffProvider';
-import { RemoteSessionRegistry } from './integrations/telegram/remoteSessionRegistry';
 
 // Guard to ensure language model tools are registered only once per extension host process.
 let lmToolsRegistered = false;
@@ -777,6 +777,10 @@ export const activate = async (context: vscode.ExtensionContext) => {
   initTelegramAuth(context);
   // Initialize ask_report history storage (load from workspace storage)
   initAskReportHistoryStorage(context);
+  const restoredAskReports = askReportHistory.markIncompleteEntriesCancelled('VS Code was reloaded before ask_report completed.');
+  if (restoredAskReports > 0) {
+    outputChannel.appendLine(`Marked ${restoredAskReports} incomplete ask_report entr${restoredAskReports === 1 ? 'y' : 'ies'} as cancelled after reload.`);
+  }
   // Initialize session storage
   initAiFetchSessionStorage(context);
   initContext7SessionStorage(context);
@@ -990,6 +994,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
 };
 
 export async function deactivate() {
+  cancelAllPendingAskReports('VS Code was reloaded before ask_report completed.');
   // Gracefully stop Telegram bot
   if (telegramBotService) {
     await telegramBotService.stop();
