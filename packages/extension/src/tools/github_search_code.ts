@@ -36,6 +36,8 @@ interface GithubSearchCodeResponse {
     items: GithubSearchCodeItem[]
 }
 
+const GITHUB_RATE_LIMIT_COOLDOWN_BUFFER_MS = 5_000
+
 function normalizeQuery(raw?: string): string {
     if (!raw || typeof raw !== 'string' || raw.trim().length === 0) {
         throw new Error('Missing required parameter: query')
@@ -67,6 +69,62 @@ function formatResults(resp: GithubSearchCodeResponse): string {
     return `${header}\n\n` + resp.items.map(formatItem).join('\n----------\n')
 }
 
+function isRateLimitStatus(status: number): boolean {
+    return status === 403 || status === 429
+}
+
+function isRateLimitError(res: Response, text: string): boolean {
+    if (!isRateLimitStatus(res.status)) return false
+    if (res.headers.get('retry-after')) return true
+    if (res.headers.get('x-ratelimit-remaining') === '0') return true
+    return text.toLowerCase().includes('rate limit')
+}
+
+function getRateLimitCooldownMs(res: Response): number | undefined {
+    const retryAfter = res.headers.get('retry-after')
+    if (retryAfter !== null) {
+        const retryAfterSeconds = parseInt(retryAfter, 10)
+        if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+            return retryAfterSeconds * 1000 + GITHUB_RATE_LIMIT_COOLDOWN_BUFFER_MS
+        }
+    }
+
+    if (res.headers.get('x-ratelimit-remaining') === '0') {
+        const reset = res.headers.get('x-ratelimit-reset')
+        if (reset !== null) {
+            const resetSeconds = Number(reset)
+            if (Number.isFinite(resetSeconds) && resetSeconds >= 0) {
+                return Math.max(0, resetSeconds * 1000 - Date.now()) + GITHUB_RATE_LIMIT_COOLDOWN_BUFFER_MS
+            }
+        }
+    }
+
+    return undefined
+}
+
+async function waitForCooldown(ms: number, signal: AbortSignal): Promise<void> {
+    if (ms <= 0) return
+    await new Promise<void>((resolve, reject) => {
+        let timeout: ReturnType<typeof setTimeout> | undefined
+        const cleanup = () => {
+            if (timeout) clearTimeout(timeout)
+            signal.removeEventListener('abort', onAbort)
+        }
+        const onAbort = () => {
+            cleanup()
+            reject(typeof DOMException !== 'undefined'
+                ? new DOMException('This operation was aborted', 'AbortError')
+                : new Error('This operation was aborted'))
+        }
+        timeout = setTimeout(() => {
+            cleanup()
+            resolve()
+        }, ms)
+        if (signal.aborted) onAbort()
+        else signal.addEventListener('abort', onAbort, { once: true })
+    })
+}
+
 async function searchCode(query: string, perPage: number | undefined, token: CancellationToken): Promise<GithubSearchCodeResponse | undefined> {
     const base = 'https://api.github.com/search/code'
     const url = new URL(base)
@@ -76,7 +134,25 @@ async function searchCode(query: string, perPage: number | undefined, token: Can
     const controller = new AbortController()
     const sub = token.onCancellationRequested(() => controller.abort())
     try {
-        const res = await fetchGitHub(url.toString(), controller.signal)
+        const requestCodeSearch = (returnRateLimitResponse: boolean) => fetchGitHub(
+            url.toString(),
+            controller.signal,
+            undefined,
+            returnRateLimitResponse ? { returnRateLimitResponse: true } : undefined,
+        )
+        let didRateLimitRetry = false
+        const retryAfterRateLimitOnce = async (response: Response): Promise<Response> => {
+            if (didRateLimitRetry) return response
+            const errorText = await response.clone().text().catch(() => '')
+            if (!isRateLimitError(response, errorText)) return response
+            const cooldownMs = getRateLimitCooldownMs(response)
+            if (cooldownMs === undefined) return response
+            didRateLimitRetry = true
+            await waitForCooldown(cooldownMs, controller.signal)
+            return await requestCodeSearch(false)
+        }
+
+        const res = await retryAfterRateLimitOnce(await requestCodeSearch(true))
         if (!res.ok) {
             const txt = await res.text().catch(() => '')
             // Special handling: unauthenticated code search -> prompt for token then retry once
@@ -93,7 +169,7 @@ async function searchCode(query: string, perPage: number | undefined, token: Can
             if (shouldRetryAuth) {
                 // Ask user to input token; if cancelled, second fetch will still fail and we'll propagate
                 try { await vscode.commands.executeCommand('reliefpilot.github.setupToken') } catch { /* ignore */ }
-                const retry = await fetchGitHub(url.toString(), controller.signal)
+                const retry = await retryAfterRateLimitOnce(await requestCodeSearch(true))
                 if (!retry.ok) {
                     const retryTxt = await retry.text().catch(() => '')
                     throw new Error(retryTxt || `${retry.status} ${retry.statusText}`)
