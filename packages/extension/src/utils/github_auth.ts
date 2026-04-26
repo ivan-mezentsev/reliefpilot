@@ -78,10 +78,23 @@ async function handleAuthError(): Promise<string | undefined> {
     }
 }
 
+interface FetchGitHubOptions {
+    returnRateLimitResponse?: boolean
+}
+
+async function isRateLimitResponse(res: Response): Promise<boolean> {
+    if (res.status !== 403 && res.status !== 429) return false
+    if (res.headers.get('retry-after')) return true
+    if (res.headers.get('x-ratelimit-remaining') === '0') return true
+    const text = await res.clone().text().catch(() => '')
+    return text.toLowerCase().includes('rate limit')
+}
+
 export async function fetchGitHub(
     url: string,
     signal?: AbortSignal,
     accept?: string,
+    options?: FetchGitHubOptions,
 ): Promise<Response> {
     while (true) {
         const token = await getToken()
@@ -95,6 +108,10 @@ export async function fetchGitHub(
         }
 
         const res = await fetch(url, { method: 'GET', signal, headers })
+
+        if (options?.returnRateLimitResponse && await isRateLimitResponse(res)) {
+            return res
+        }
 
         if (res.status === 401 || res.status === 403) {
             if (!token) {

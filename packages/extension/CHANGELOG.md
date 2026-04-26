@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 - 2026-04-27
+
+- feat(github_search_code): implement rate limit handling in GitHub API requests
+
 ## 1.0.1 - 2026-03-28
 
 - docs: update examples in README for ripgrep usage
