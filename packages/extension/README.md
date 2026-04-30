@@ -2,6 +2,12 @@
 
 Your GitHub Copilot's new best buddy. Relief Pilot brings the features you've been waiting for right into VSCode, giving you advanced control to make your AI assistant better than ever.
 
+> ⚠️ **ATTENTION!**
+> Recommended VSCode version for production use: `1.110`
+
+> ⚠️ **NOTICE!**
+> After the [retirement of GitHub Copilot subscription plans](https://github.blog/news-insights/company-news/changes-to-github-copilot-individual-plans/), you can still use Relief Pilot with the familiar controlled flow, all tools, and the extension itself, including `ai_fetch_url`, by using alternative providers according to the [Omniroute + Copilot + Codex subscriptions](https://github.com/ivan-mezentsev/reliefpilot//blob/master/docs/omniroute_copilot_codex.md) or other alternatives.
+
 ## Key Features
 
 ### Ask Report "Human In The Loop"
