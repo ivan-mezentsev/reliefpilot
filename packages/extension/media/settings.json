@@ -1,0 +1,26 @@
+{
+  "github.copilot.chat.alternateGptPrompt.enabled": true,
+  "github.copilot.chat.scopeSelection": true,
+  "chat.agent.maxRequests": 500,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "You are an expert Git commit message generator that creates semantic, conventional commit messages.\n\nTASK: Analyze the provided git diff and generate a conventional commit message that accurately describes the changes.\n\nREQUIREMENTS:\n1. Follow Conventional Commits specification (https://www.conventionalcommits.org/)\n2. Use appropriate commit types: feat, fix, docs, style, refactor, test, chore, build, ci, revert\n3. Include scope when relevant (optional)\n4. Keep title under 72 characters\n5. Include a body with bullet points for complex changes\n6. Use imperative mood (\"add\" not \"added\")\n\nFORMAT:\n<type>(<scope>): <description>\n\n<body with bullet points if needed>\n\n[optional footer]\n\nCOMMIT TYPES:\n- feat: New feature or functionality\n- fix: Bug fix (must be explicitly visible in diff)\n- docs: Documentation changes\n- style: Formatting, missing semi-colons, etc.\n- refactor: Code restructuring without behavior change\n- test: Adding tests or test improvements\n- chore: Maintenance, dependencies, configuration\n- build: Build system or dependency changes\n- ci: CI/CD pipeline changes\n- revert: Reverting previous commits\n\nANALYSIS GUIDELINES:\n- Focus on the \"what\" and \"why\" of changes\n- Consider the business impact\n- Group related changes logically\n- Identify breaking changes (add ! after type)\n- Look for patterns in file names and changes\n\nCONTEXT PROVIDED:\n- Git diff showing exact changes\n- Branch name (if meaningful)\n- Recent commit history context\n- Optional user-provided context\n\nGenerate a clear, professional commit message that would help future developers understand this change."
+    },
+  ],
+  "telemetry.telemetryLevel": "off",
+  "workbench.settings.showAISearchToggle": true,
+  "chat.implicitContext.suggestedContext": false,
+  "github.copilot.chat.agent.currentEditorContext.enabled": false,
+  "github.copilot.chat.newWorkspaceCreation.enabled": false,
+  "github.copilot.chat.responsesApiReasoningEffort": "high",
+  "chat.agent.thinking.collapsedTools": "off",
+  "chat.agent.thinkingStyle": "collapsedPreview",
+  "chat.customAgentInSubagent.enabled": true,
+  "chat.checkpoints.showFileChanges": true,
+  "github.copilot.chat.edits.gemini3MultiReplaceString": true,
+  "github.copilot.chat.alternateGeminiModelFPrompt.enabled": true,
+  "github.copilot.chat.anthropic.thinking.budgetTokens": 32000,
+  "github.copilot.chat.responsesApiReasoningSummary": "detailed",
+  "chat.restoreLastPanelSession": true,
+  "workbench.editor.useModal": "off"
+}

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { APPLY_RECOMMENDED_SETTINGS_COMMAND, openOrFocusRecommendedSettingsPanel } from './recommendedSettings';
 import { CREATE_SPECS_MODE_COMMAND, registerSpecsModeCommand } from './specsMode';
 import { AiFetchUrlLanguageModelTool } from './tools/ai_fetch_url';
 import { AskReportLanguageModelTool, openOrFocusAskReportById } from './tools/ask_report';
@@ -354,6 +355,10 @@ async function showReliefPilotMenu() {
       description: 'Open VS Code Settings filtered by @reliefpilot',
     },
     {
+      label: 'Apply recommended settings for VSCode',
+      description: 'Compare and apply recommended VS Code user settings',
+    },
+    {
       label: SELECT_AI_FETCH_URL_MODEL_LABEL,
       description: 'Select from all available VS Code chat models and store it in settings',
     },
@@ -400,6 +405,8 @@ async function showReliefPilotMenu() {
       const message = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`Failed to open settings: ${message}`);
     }
+  } else if (pick.label === 'Apply recommended settings for VSCode') {
+    await vscode.commands.executeCommand(APPLY_RECOMMENDED_SETTINGS_COMMAND);
   } else if (pick.label === 'Halt for Feedback') {
     await vscode.commands.executeCommand(HALT_FOR_FEEDBACK_COMMAND);
   } else if (pick.label === SELECT_AI_FETCH_URL_MODEL_LABEL) {
@@ -705,6 +712,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
     vscode.commands.registerCommand('reliefpilot.speech.setupApiKey', () => setupOrUpdateSpeechApiKey()),
     vscode.commands.registerCommand('reliefpilot.voiceInput', () => toggleActiveVoiceInput()),
     vscode.commands.registerCommand('reliefpilot.speech.selectInputDevice', () => selectInputDevice()),
+    vscode.commands.registerCommand(APPLY_RECOMMENDED_SETTINGS_COMMAND, () => openOrFocusRecommendedSettingsPanel()),
   );
   registerSpecsModeCommand(context);
   showServerStatusBar();
