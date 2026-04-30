@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0 - 2026-04-30
+
+- feat(settings): add recommended settings panel and apply functionality
+- docs(readme): update README with VSCode version recommendation and Copilot notice
+- feat(extension): change default model selection `ai_fetch_url` to show all models
+
 ## 1.0.2 - 2026-04-27
 
 - feat(github_search_code): implement rate limit handling in GitHub API requests
