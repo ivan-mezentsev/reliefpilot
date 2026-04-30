@@ -573,8 +573,8 @@ async function selectModelForAiFetchUrl() {
   qp.matchOnDescription = true;
   qp.matchOnDetail = true;
 
-  // Default ON: show only Copilot models.
-  let copilotOnly = true;
+  // Default OFF: show all models by default.
+  let copilotOnly = false;
 
   const copilotOnlyButton: vscode.QuickInputButton = {
     iconPath: new vscode.ThemeIcon('filter'),
