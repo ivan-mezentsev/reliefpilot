@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 - 2026-05-01
+
+- feat(google_search): Brought back Google Search tool integration (This still to work for old users within the limits - let's try your old API keys)
+
 ## 1.1.0 - 2026-04-30
 
 - feat(settings): add recommended settings panel and apply functionality

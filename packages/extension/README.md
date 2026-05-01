@@ -102,6 +102,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
   - **ai_fetch_url**: Fetching and extracting web content data using a sub-agent
 - Search Engines:
   - **duckduckgo-search**: Search the web using DuckDuckGo with HTML scraping
+  - **google_search**: Search Google using the Programmable Search Engine (soon EOL - announced by Google)
   - **felo_search**: AI-powered search with contextual responses for up-to-date technical information (releases, advisories, migrations, benchmarks, community insights)
   - **linkup_search**: Search the web via Linkup API
   - **exa_search**: Search the web via Exa API
@@ -132,7 +133,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    ```markdown
    ## Language & Communication
 
-  - **Web search**: DuckDuckGo/Linkup/Exa queries in English principally
+   - **Web search**: DuckDuckGo/Google/Linkup/Exa queries in English principally
 
    ## Code Development
 
@@ -221,6 +222,8 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
 4. Stock up on tokens — you'll need them for maximum comfort:
 
    - [context7.com/dashboard](https://context7.com/dashboard)
+   - [Google API Key](https://support.google.com/googleapi/answer/6158862?hl=en) (free 100 req/day)
+   - [Google Search Engine ID](https://support.google.com/programmable-search/answer/12499034?hl=en)
    - [Linkup API Key](https://app.linkup.so) (free 1000 req/month)
    - [Exa API Key](https://dashboard.exa.ai/api-keys)
    - [Create a GitHub Personal Access Token](https://github.com/settings/personal-access-tokens/new)
