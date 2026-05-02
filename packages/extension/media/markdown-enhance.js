@@ -3,6 +3,7 @@
 // Responsibilities (optionally enabled via flags):
 //   - Parse markdown via marked (if available)
 //   - (optional) Highlight code blocks via highlight.js
+//   - (optional) Render KaTeX math blocks delimited by $$...$$
 //   - (optional) Render Mermaid diagrams
 //   - (optional) Decorate code blocks with language badge + copy button
 // Nothing here sends messages itself; copying uses provided callback.
@@ -54,6 +55,81 @@
       }
       return langs;
     } catch { return null; }
+  }
+
+  /** Render TeX to HTML via KaTeX */
+  function renderKatex(tex, displayMode) {
+    try {
+      if (!window.katex || typeof window.katex.renderToString !== 'function') return escapeHtml(tex || '');
+      return window.katex.renderToString(tex || '', {
+        displayMode: displayMode === true,
+        throwOnError: false,
+        trust: false,
+      });
+    } catch {
+      return escapeHtml(tex || '');
+    }
+  }
+
+  /** Configure marked once with KaTeX math support */
+  function configureMarked() {
+    if (!window.marked) return;
+    try {
+      if (typeof window.marked.setOptions === 'function') {
+        window.marked.setOptions({ gfm: true });
+      } else if (typeof window.marked.use === 'function') {
+        window.marked.use({ gfm: true });
+      }
+    } catch { /* ignore */ }
+
+    try {
+      if (!window.__reliefPilotMarkedMathConfigured && window.katex && typeof window.marked.use === 'function') {
+        window.marked.use({
+          extensions: [
+            {
+              name: 'mathBlock',
+              level: 'block',
+              start(src) { return src.match(/\$\$/)?.index; },
+              tokenizer(src) {
+                const match = /^\s*\$\$[ \t]*\n?([\s\S]+?)\n?\$\$[ \t]*(?:\n|$)/.exec(src);
+                if (!match || !match[1].trim()) return;
+                return {
+                  type: 'mathBlock',
+                  raw: match[0],
+                  text: match[1].trim(),
+                };
+              },
+              renderer(token) {
+                return '<div class="math math-display">' + renderKatex(token.text, true) + '</div>\n';
+              },
+            },
+            {
+              name: 'mathInline',
+              level: 'inline',
+              start(src) { return src.match(/\$/)?.index; },
+              tokenizer(src) {
+                if (src.startsWith('$$')) return;
+                const match = /^\$((?:\\.|[^$\\\n])+?)\$/.exec(src);
+                if (!match || !match[1].trim()) return;
+                return {
+                  type: 'mathInline',
+                  raw: match[0],
+                  text: match[1].trim(),
+                };
+              },
+              renderer(token) {
+                return '<span class="math math-inline">' + renderKatex(token.text, false) + '</span>';
+              },
+            },
+          ],
+        });
+        window.__reliefPilotMarkedMathConfigured = true;
+      }
+    } catch { /* ignore */ }
+
+    try {
+      window.marked.use({ mangle: false, headerIds: false });
+    } catch { /* ignore */ }
   }
 
   /** SVG markup for copy icon */
@@ -161,14 +237,7 @@
     let html = '';
     try {
       if (window.marked) {
-        try {
-          if (typeof window.marked.setOptions === 'function') {
-            window.marked.setOptions({ gfm: true });
-          } else if (typeof window.marked.use === 'function') {
-            window.marked.use({ gfm: true });
-          }
-        } catch { /* ignore */ }
-        window.marked.use({ mangle: false, headerIds: false });
+        configureMarked();
         html = window.marked.parse(markdown || '', { async: false });
       } else {
         html = escapeHtml(markdown || '');

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 - 2026-05-03
+
+- docs(extension): update Google Search tool description and API details
+- feat(ask_report): integrate KaTeX for math rendering in markdown
+
 ## 1.2.0 - 2026-05-01
 
 - feat(google_search): Brought back Google Search tool integration (This still to work for old users within the limits - let's try your old API keys)

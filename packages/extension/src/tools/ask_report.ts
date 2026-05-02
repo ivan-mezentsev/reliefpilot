@@ -104,6 +104,9 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
     const hljsCssUri = panel.webview.asWebviewUri(
         vscode.Uri.joinPath(extensionUri, 'media', 'highlight.github.css'),
     )
+    const katexCssUri = panel.webview.asWebviewUri(
+        vscode.Uri.joinPath(extensionUri, 'media', 'katex.min.css'),
+    )
     const voiceInputUri = voiceInputEnabled
         ? panel.webview.asWebviewUri(
             vscode.Uri.joinPath(extensionUri, 'media', 'voice-input.js'),
@@ -115,6 +118,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
     const csp = [
         "default-src 'none'",
         `img-src ${panel.webview.cspSource} blob: data:`,
+        `font-src ${panel.webview.cspSource}`,
         `style-src ${panel.webview.cspSource} 'unsafe-inline'`,
         `script-src 'nonce-${nonce}'`,
     ].join('; ')
@@ -140,6 +144,7 @@ export async function askReport(opts: AskReportOptions): Promise<AskUserResult> 
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="${cssUri}" />
     <link rel="stylesheet" href="${hljsCssUri}" />
+    <link rel="stylesheet" href="${katexCssUri}" />
         <title>${escapeHtml(title)}</title>
     </head>
     <body>
