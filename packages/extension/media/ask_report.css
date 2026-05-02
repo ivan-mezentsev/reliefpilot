@@ -471,3 +471,15 @@ body.vscode-high-contrast .hljs-title {
   max-width: 100%;
   height: auto;
 }
+
+/* KaTeX display math is intentionally nowrap; keep overflow inside the math block. */
+.markdown .math-display,
+.markdown .math-display .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown .math-display .katex-display > .katex {
+  min-width: max-content;
+}

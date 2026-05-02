@@ -21,7 +21,7 @@ async function main() {
       esbuildProblemMatcherPlugin,
     ],
   });
-  // build webview vendor (marked + highlight.js) - separate build because it's browser targeted
+  // build webview vendor (marked + highlight.js + KaTeX) - separate build because it's browser targeted
   await esbuild.build({
     entryPoints: ['src/webview/markdownDeps.ts'],
     bundle: true,
@@ -33,8 +33,9 @@ async function main() {
     outfile: 'media/markdown-deps.js',
     logLevel: 'warning',
   });
-  // copy highlight.js css theme from node_modules
+  // copy webview CSS/assets from node_modules
   await copyHighlightCss();
+  await copyKatexAssets();
   // copy jsdom's xhr-sync-worker.js to dist
   await copyJsdomSyncWorker();
   if (watch) {
@@ -111,6 +112,22 @@ async function copyHighlightCss() {
   fs.copyFileSync(src, target);
   } catch (e) {
   console.warn('[build] unable to copy highlight.js css', e && e.message ? e.message : e);
+  }
+}
+
+async function copyKatexAssets() {
+  try {
+    const cssSrc = require.resolve('katex/dist/katex.min.css');
+    const distDir = path.dirname(cssSrc);
+    const fontsSrc = path.join(distDir, 'fonts');
+    const cssTarget = path.join(__dirname, 'media', 'katex.min.css');
+    const fontsTarget = path.join(__dirname, 'media', 'fonts');
+
+    fs.copyFileSync(cssSrc, cssTarget);
+    fs.rmSync(fontsTarget, { recursive: true, force: true });
+    fs.cpSync(fontsSrc, fontsTarget, { recursive: true });
+  } catch (e) {
+    console.warn('[build] unable to copy KaTeX assets', e && e.message ? e.message : e);
   }
 }
 

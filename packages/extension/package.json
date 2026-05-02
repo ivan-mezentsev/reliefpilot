@@ -1254,6 +1254,7 @@
     "esbuild": "^0.25.12",
     "highlight.js": "^11.10.0",
     "isbinaryfile": "^5.0.6",
+    "katex": "0.16.45",
     "marked": "16.4.1",
     "mermaid": "^11.11.0",
     "p-wait-for": "^6.0.0",

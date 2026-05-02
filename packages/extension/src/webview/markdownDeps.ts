@@ -5,13 +5,21 @@ import { marked } from 'marked';
 import mermaid from 'mermaid';
 // Full highlight.js build includes all languages.
 
-// Expose to window (webview script expects window.marked, window.hljs & window.mermaid)
+type KatexRuntime = {
+	renderToString(expression: string, options?: Record<string, unknown>): string;
+};
+
+const katex = require('katex') as KatexRuntime;
+
+// Expose to window (webview script expects window.marked, window.hljs, window.katex & window.mermaid)
 // We assign on globalThis to survive minification/changes.
 // The actual webview HTML will just consume these via a single script tag.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).marked = marked;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).hljs = hljs;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).katex = katex;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).mermaid = mermaid;
 

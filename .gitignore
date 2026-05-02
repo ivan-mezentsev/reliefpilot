@@ -3,6 +3,8 @@
 packages/extension/.vscode-test/**
 packages/extension/media/markdown-deps.js
 packages/extension/media/highlight.github.css
+packages/extension/media/katex.min.css
+packages/extension/media/fonts
 dist
 node_modules
 out
