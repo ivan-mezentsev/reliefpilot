@@ -102,7 +102,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
   - **ai_fetch_url**: Fetching and extracting web content data using a sub-agent
 - Search Engines:
   - **duckduckgo-search**: Search the web using DuckDuckGo with HTML scraping
-  - **google_search**: Search Google using the Programmable Search Engine (soon EOL - announced by Google)
+  - **google_search**: Search Google using the Programmable Search Engine [until January 1, 2027](https://developers.google.com/custom-search/v1/overview)
   - **felo_search**: AI-powered search with contextual responses for up-to-date technical information (releases, advisories, migrations, benchmarks, community insights)
   - **linkup_search**: Search the web via Linkup API
   - **exa_search**: Search the web via Exa API
