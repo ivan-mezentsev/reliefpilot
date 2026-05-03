@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 - 2026-05-04
+
+- feat(read_file): add tool for reading file contents with offset and limit
+- feat(rp_read_file): enhance Copilot chat session resource handling
+
 ## 1.2.1 - 2026-05-03
 
 - docs(extension): update Google Search tool description and API details
