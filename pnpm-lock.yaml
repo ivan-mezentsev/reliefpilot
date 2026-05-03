@@ -13,6 +13,9 @@ importers:
       '@nanocollective/get-md':
         specifier: ^1.0.1
         version: 1.0.1
+      '@vscode/prompt-tsx':
+        specifier: ^0.4.0-alpha.8
+        version: 0.4.0-alpha.8
       esbuild:
         specifier: ^0.25.12
         version: 0.25.12
@@ -727,6 +730,9 @@ packages:
 
   '@types/vscode@1.105.0':
     resolution: {integrity: sha512-Lotk3CTFlGZN8ray4VxJE7axIyLZZETQJVWi/lYoUVQuqfRxlQhVOfoejsD2V3dVXPSbS15ov5ZyowMAzgUqcw==}
+
+  '@vscode/prompt-tsx@0.4.0-alpha.8':
+    resolution: {integrity: sha512-AJbRUgrGpJNl59uiV0lRa2FsZnO74Fjm4KVt7dQT0PN+ghQjFGJ6lY+w4kF8Gj+2HbOIXNpJvDdGBwa7yuL1+w==}
 
   '@vscode/test-cli@0.0.12':
     resolution: {integrity: sha512-iYN0fDg29+a2Xelle/Y56Xvv7Nc8Thzq4VwpzAF/SIE6918rDicqfsQxV6w1ttr2+SOm+10laGuY9FG2ptEKsQ==}
@@ -3224,6 +3230,8 @@ snapshots:
     optional: true
 
   '@types/vscode@1.105.0': {}
+
+  '@vscode/prompt-tsx@0.4.0-alpha.8': {}
 
   '@vscode/test-cli@0.0.12':
     dependencies:
