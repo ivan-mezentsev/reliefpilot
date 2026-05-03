@@ -142,6 +142,34 @@ suite('Read File Tool Test Suite', function () {
 		assert.ok(!prepared.confirmationMessages);
 	});
 
+	test('prepareInvocation renders a compact one-line message for Copilot chat session resource files', async function () {
+		const internalResourcePath = path.join(
+			os.homedir(),
+			'Library',
+			'Application Support',
+			'Code',
+			'User',
+			'workspaceStorage',
+			'test-workspace',
+			'GitHub.copilot-chat',
+			'chat-session-resources',
+			'test-session',
+			'test-call',
+			'content.txt',
+		);
+
+		const prepared = lmTool.prepareInvocation({ input: { filePath: internalResourcePath, offset: 10, limit: 25 } } as any);
+		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+
+		assert.ok(!prepared.confirmationMessages);
+		assert.match(invocationValue, /^!\[Relief Pilot\]\(.+\|width=10,height=10\) Relief Pilot · \*\*rp_read_file\*\* /);
+		assert.match(invocationValue, /\[content\.txt\]\(file:[^)]+ "[^"]*content\.txt"\)/);
+		assert.match(invocationValue, / `10, 25` /);
+		assert.match(invocationValue, /\[⏸\]\(command:reliefpilot\.haltForFeedback\)$/);
+		assert.ok(!invocationValue.includes('\n'));
+		assert.ok(!invocationValue.includes('- Path:'));
+	});
+
 	test('throws a real error for missing files instead of returning success text', async function () {
 		await assert.rejects(
 			() => tool.execute({ filePath: path.join(tmpDir, 'missing.txt') }),

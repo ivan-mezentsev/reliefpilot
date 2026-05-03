@@ -76,6 +76,14 @@ function escapeInlineCode(text: string): string {
 	return text.replace(/`/g, '\\`');
 }
 
+function escapeMarkdownLinkText(text: string): string {
+	return text.replace(/([\\\[\]])/g, '\\$1');
+}
+
+function escapeMarkdownLinkTitle(text: string): string {
+	return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 function toDisplayPath(uri: vscode.Uri): string {
 	return uri.scheme === 'file' ? uri.fsPath : uri.toString();
 }
@@ -86,6 +94,47 @@ function isCopilotSessionResourceUri(uri: vscode.Uri): boolean {
 	}
 
 	return copilotSessionResourcePathRegexp.test(uri.fsPath);
+}
+
+function getFileLinkLabel(uri: vscode.Uri): string {
+	if (uri.scheme === 'file') {
+		return path.basename(uri.fsPath) || uri.fsPath;
+	}
+
+	return path.posix.basename(uri.path) || uri.toString();
+}
+
+function formatMarkdownFileLink(uri: vscode.Uri): string {
+	const label = escapeMarkdownLinkText(getFileLinkLabel(uri));
+	const title = escapeMarkdownLinkTitle(toDisplayPath(uri));
+	return `[${label}](${uri.toString()} "${title}")`;
+}
+
+function buildCompactSessionResourceInvocationMessage(
+	uri: vscode.Uri,
+	offset: number | undefined,
+	limit: number | undefined,
+	showPauseButton: boolean,
+): vscode.MarkdownString {
+	const md = new vscode.MarkdownString(undefined, true);
+	md.supportHtml = true;
+	md.isTrusted = true;
+	const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
+	md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
+	md.appendMarkdown('Relief Pilot · **rp_read_file** ');
+	md.appendMarkdown(formatMarkdownFileLink(uri));
+	if (offset !== undefined || limit !== undefined) {
+		const compactRange = [offset, limit]
+			.filter((value): value is number => typeof value === 'number')
+			.join(', ');
+		if (compactRange.length > 0) {
+			md.appendMarkdown(` \`${compactRange}\``);
+		}
+	}
+	if (showPauseButton) {
+		md.appendMarkdown(' [⏸](command:reliefpilot.haltForFeedback)');
+	}
+	return md;
 }
 
 function tryParseDirectUri(rawFilePath: string): vscode.Uri | undefined {
@@ -559,15 +608,22 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 		options: LanguageModelToolInvocationPrepareOptions<ReadFileInput>,
 	): PreparedToolInvocation {
 		const rawFilePath = typeof options.input?.filePath === 'string' ? options.input.filePath.trim() : '<missing-filePath>';
+		const directUri = tryParseDirectUri(rawFilePath);
 		const offset = normalizeOffset(options.input?.offset);
 		const limit = normalizeLimit(options.input?.limit);
+		const showPauseButton = vscode.workspace
+			.getConfiguration('reliefpilot')
+			.get<boolean>('showPauseButtonInChat', true);
+
+		if (directUri && isCopilotSessionResourceUri(directUri)) {
+			return {
+				invocationMessage: buildCompactSessionResourceInvocationMessage(directUri, offset, limit, showPauseButton),
+			};
+		}
 
 		const md = new vscode.MarkdownString(undefined, true);
 		md.supportHtml = true;
 		md.isTrusted = true;
-		const showPauseButton = vscode.workspace
-			.getConfiguration('reliefpilot')
-			.get<boolean>('showPauseButtonInChat', true);
 		const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
 		md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
 		md.appendMarkdown(`Relief Pilot · **rp_read_file**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`);
