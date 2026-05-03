@@ -324,6 +324,34 @@
         }
       },
       {
+        "name": "rp_read_file",
+        "displayName": "RP Read file",
+        "modelDescription": "Read the contents of a file. Line numbers are 1-indexed. This tool truncates output at 2000 lines and can be called repeatedly with optional offset and limit parameters to read larger files in chunks. Binary files use offset and limit as byte offsets.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "rp_read_file",
+        "icon": "icon.png",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "The absolute path of the file to read."
+            },
+            "offset": {
+              "type": "number",
+              "description": "Optional: the 1-based line number to start reading from. Only use this if the file is too large to read at once. If not specified, the file will be read from the beginning."
+            },
+            "limit": {
+              "type": "number",
+              "description": "Optional: the maximum number of lines to read. Only use this together with offset if the file is too large to read at once."
+            }
+          },
+          "required": [
+            "filePath"
+          ]
+        }
+      },
+      {
         "name": "focus_editor",
         "displayName": "Focus editor",
         "modelDescription": "Open the specified file in the VSCode editor and navigate to a specific line and column.\nUse this tool to bring a file into focus and position the editor's cursor where desired.\nNote: This tool operates on the editor visual environment so that the user can see the file. It does not return the file contents in the tool call result.",
@@ -1251,6 +1279,7 @@
   },
   "dependencies": {
     "@nanocollective/get-md": "^1.0.1",
+    "@vscode/prompt-tsx": "^0.4.0-alpha.8",
     "esbuild": "^0.25.12",
     "highlight.js": "^11.10.0",
     "isbinaryfile": "^5.0.6",
