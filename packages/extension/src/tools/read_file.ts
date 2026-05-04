@@ -23,12 +23,48 @@ export interface ReadFileInput {
 	filePath: string;
 	offset?: number;
 	limit?: number;
+	ranges?: Array<{
+		startLine: number;
+		endLine?: number;
+	}>;
+	includeLineNumbers?: boolean;
+	numberBlankLines?: boolean;
+	includeRangeHeaders?: boolean;
 }
 
 type ReadFileTokenizationOptions = {
 	tokenBudget?: number;
 	countTokens?: (text: string, token?: CancellationToken) => Thenable<number>;
 };
+
+interface ReadFileRequestedRange {
+	startLine: number;
+	endLine: number;
+}
+
+interface ReadFileStructuredLine {
+	lineNumber?: number;
+	text: string;
+	isBlank: boolean;
+}
+
+interface ReadFileStructuredRange {
+	startLine: number;
+	endLine: number;
+	lines: ReadFileStructuredLine[];
+}
+
+interface ReadFileAdvancedOptions {
+	ranges: ReadFileRequestedRange[];
+	includeLineNumbers: boolean;
+	numberBlankLines: boolean;
+	includeRangeHeaders: boolean;
+}
+
+interface ReadFileToolResponse extends ToolResponse {
+	filePath: string;
+	ranges?: ReadFileStructuredRange[];
+}
 
 interface ReadFilePromptElementProps extends BasePromptElementProps {
 	content: string;
@@ -178,8 +214,74 @@ function normalizeLimit(value: unknown): number | undefined {
 	return value;
 }
 
+function normalizePositiveLineNumber(value: unknown, fieldName: string): number {
+	if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+		throw new Error(`${fieldName} must be a positive integer.`);
+	}
+
+	return value;
+}
+
+function normalizeRequestedRanges(
+	ranges: ReadFileInput['ranges'],
+): ReadFileRequestedRange[] | undefined {
+	if (ranges === undefined) {
+		return undefined;
+	}
+
+	if (!Array.isArray(ranges) || ranges.length === 0) {
+		throw new Error('ranges must be a non-empty array.');
+	}
+
+	return ranges.map((range, index) => {
+		if (!range || typeof range !== 'object') {
+			throw new Error(`ranges[${index}] must be an object.`);
+		}
+
+		let startLine = normalizePositiveLineNumber(range.startLine, `ranges[${index}].startLine`);
+		let endLine = range.endLine === undefined
+			? startLine
+			: normalizePositiveLineNumber(range.endLine, `ranges[${index}].endLine`);
+
+		if (startLine > endLine) {
+			[startLine, endLine] = [endLine, startLine];
+		}
+
+		return { startLine, endLine };
+	});
+}
+
 function clamp(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max);
+}
+
+function hasLegacyRangeRequest(input: ReadFileInput): boolean {
+	return input.offset !== undefined || input.limit !== undefined;
+}
+
+function getAdvancedReadOptions(
+	input: ReadFileInput,
+	uri: vscode.Uri | undefined,
+): ReadFileAdvancedOptions | undefined {
+	if (hasLegacyRangeRequest(input)) {
+		return undefined;
+	}
+
+	if (uri && isCopilotSessionResourceUri(uri)) {
+		return undefined;
+	}
+
+	const ranges = normalizeRequestedRanges(input.ranges);
+	if (!ranges) {
+		return undefined;
+	}
+
+	return {
+		ranges,
+		includeLineNumbers: input.includeLineNumbers === true,
+		numberBlankLines: input.numberBlankLines === true,
+		includeRangeHeaders: input.includeRangeHeaders === true,
+	};
 }
 
 function getTextRange(
@@ -201,6 +303,22 @@ function getTextRange(
 		endLine,
 		truncated: effectiveLimit !== requestedLimit && endLine < totalLines,
 	};
+}
+
+function getRequestedTextRanges(
+	totalLines: number,
+	ranges: ReadonlyArray<ReadFileRequestedRange>,
+): ReadFileRequestedRange[] {
+	return ranges.map((range, index) => {
+		if (range.startLine > totalLines) {
+			throw new Error(`Invalid ranges[${index}].startLine ${range.startLine}: file only has ${totalLines} line${totalLines === 1 ? '' : 's'}. Line numbers are 1-indexed.`);
+		}
+
+		return {
+			startLine: clamp(range.startLine, 1, totalLines),
+			endLine: clamp(range.endLine, 1, totalLines),
+		};
+	});
 }
 
 function getBinaryByteRange(
@@ -333,6 +451,70 @@ function getDocumentRangeText(
 	const start = new vscode.Position(startLine - 1, 0);
 	const end = document.lineAt(endLine - 1).range.end;
 	return document.getText(new vscode.Range(start, end));
+}
+
+function buildStructuredReadRanges(
+	document: vscode.TextDocument,
+	ranges: ReadonlyArray<ReadFileRequestedRange>,
+	options: ReadFileAdvancedOptions,
+): ReadFileStructuredRange[] {
+	return ranges.map(({ startLine, endLine }) => {
+		const lines: ReadFileStructuredLine[] = [];
+
+		for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
+			const lineText = document.lineAt(lineNumber - 1).text;
+			const isBlank = lineText.length === 0;
+			const shouldIncludeLineNumber = options.includeLineNumbers && (!isBlank || options.numberBlankLines);
+
+			lines.push({
+				...(shouldIncludeLineNumber ? { lineNumber } : {}),
+				text: lineText,
+				isBlank,
+			});
+		}
+
+		return {
+			startLine,
+			endLine,
+			lines,
+		};
+	});
+}
+
+function buildTextOutputFromRanges(
+	ranges: ReadonlyArray<ReadFileStructuredRange>,
+	options: ReadFileAdvancedOptions,
+): string {
+	const blocks = ranges.map((range) => {
+		const lineOutput = range.lines
+			.map((line) => line.lineNumber === undefined ? line.text : `${line.lineNumber}\t${line.text}`)
+			.join('\n');
+
+		if (!options.includeRangeHeaders) {
+			return lineOutput;
+		}
+
+		const header = `--- lines ${range.startLine}-${range.endLine} ---`;
+		return lineOutput.length > 0 ? `${header}\n${lineOutput}` : header;
+	});
+
+	return blocks.join(options.includeRangeHeaders ? '\n\n' : '\n');
+}
+
+function buildReadFileToolResponse(
+	uri: vscode.Uri,
+	text: string,
+	ranges?: ReadFileStructuredRange[],
+): ReadFileToolResponse {
+	return {
+		...formatResponse.toolResult(text),
+		filePath: toDisplayPath(uri),
+		...(ranges ? { ranges } : {}),
+	};
+}
+
+function formatLineRange(range: ReadFileRequestedRange): string {
+	return `${range.startLine}-${range.endLine}`;
 }
 
 function getEmptyOrWhitespaceDocumentMessage(uri: vscode.Uri, text: string): string | undefined {
@@ -527,13 +709,13 @@ export class ReadFileTool {
 		input: ReadFileInput,
 		tokenizationOptions?: ReadFileTokenizationOptions,
 		token?: CancellationToken,
-	): Promise<ToolResponse> {
+	): Promise<ReadFileToolResponse> {
 		if (!input || typeof input.filePath !== 'string' || input.filePath.trim().length === 0) {
 			throw new Error('filePath must be a non-empty string.');
 		}
 
 		if (token?.isCancellationRequested) {
-			return formatResponse.toolResult('Operation cancelled.');
+			return buildReadFileToolResponse(vscode.Uri.file(input.filePath), 'Operation cancelled.');
 		}
 
 		const uri = await resolveReadFileUri(input.filePath);
@@ -542,16 +724,35 @@ export class ReadFileTool {
 		if (fileData.kind === 'binary') {
 			const { startByte, endByte, truncated } = getBinaryByteRange(fileData.data.byteLength, input);
 			const responseText = buildBinaryReadResponse(fileData.data, startByte, endByte, truncated);
-			return formatResponse.toolResult(responseText);
+			return buildReadFileToolResponse(uri, responseText);
 		}
 
 		const totalLines = Math.max(fileData.document.lineCount, 1);
-		const { startLine, endLine, truncated } = getTextRange(totalLines, input);
 		const documentText = fileData.document.getText();
 		const specialMessage = getEmptyOrWhitespaceDocumentMessage(uri, documentText);
 		if (specialMessage) {
-			return formatResponse.toolResult(specialMessage);
+			return buildReadFileToolResponse(uri, specialMessage);
 		}
+
+		const advancedOptions = getAdvancedReadOptions(input, uri);
+		if (advancedOptions) {
+			const ranges = getRequestedTextRanges(totalLines, advancedOptions.ranges);
+			const structuredRanges = buildStructuredReadRanges(fileData.document, ranges, advancedOptions);
+			const rawResponseText = buildTextOutputFromRanges(structuredRanges, advancedOptions);
+			const responseText = await applyTokenBudget(
+				rawResponseText,
+				tokenizationOptions,
+				token ?? new vscode.CancellationTokenSource().token,
+			);
+
+			return buildReadFileToolResponse(
+				uri,
+				responseText,
+				structuredRanges,
+			);
+		}
+
+		const { startLine, endLine, truncated } = getTextRange(totalLines, input);
 
 		let content = getDocumentRangeText(fileData.document, startLine, endLine);
 		if (truncated) {
@@ -563,7 +764,7 @@ export class ReadFileTool {
 			token ?? new vscode.CancellationTokenSource().token,
 		);
 
-		return formatResponse.toolResult(responseText);
+		return buildReadFileToolResponse(uri, responseText);
 	}
 }
 
@@ -611,6 +812,7 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 		const directUri = tryParseDirectUri(rawFilePath);
 		const offset = normalizeOffset(options.input?.offset);
 		const limit = normalizeLimit(options.input?.limit);
+		const advancedOptions = getAdvancedReadOptions(options.input, directUri);
 		const showPauseButton = vscode.workspace
 			.getConfiguration('reliefpilot')
 			.get<boolean>('showPauseButtonInChat', true);
@@ -634,6 +836,17 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 			}
 			if (limit !== undefined) {
 				md.appendMarkdown(`- Limit: \`${limit}\`  \n`);
+			}
+		} else if (advancedOptions) {
+			md.appendMarkdown(`- Ranges: \`${advancedOptions.ranges.map(formatLineRange).join('; ')}\`  \n`);
+			if (advancedOptions.includeLineNumbers) {
+				md.appendMarkdown(`- Include line numbers: \`true\`  \n`);
+				if (advancedOptions.numberBlankLines) {
+					md.appendMarkdown(`- Number blank lines: \`true\`  \n`);
+				}
+			}
+			if (advancedOptions.includeRangeHeaders) {
+				md.appendMarkdown(`- Include range headers: \`true\`  \n`);
 			}
 		} else {
 			md.appendMarkdown(`- Range: \`full file\`  \n`);

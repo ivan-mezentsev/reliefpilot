@@ -326,7 +326,7 @@
       {
         "name": "rp_read_file",
         "displayName": "RP Read file",
-        "modelDescription": "Read the contents of a file. Line numbers are 1-indexed. This tool truncates output at 2000 lines and can be called repeatedly with optional offset and limit parameters to read larger files in chunks. Binary files use offset and limit as byte offsets.",
+        "modelDescription": "Read the contents of a file. Line numbers are 1-indexed. This tool truncates output at 2000 lines and can be called repeatedly with optional offset and limit parameters to read larger files in chunks. Binary files use offset and limit as byte offsets. When both offset and limit are omitted for a normal file, you can instead pass ranges to read multiple inclusive line ranges in one call, optionally include line numbers, number blank lines, and add range headers.",
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "rp_read_file",
         "icon": "icon.png",
@@ -344,6 +344,38 @@
             "limit": {
               "type": "number",
               "description": "Optional: the maximum number of lines to read. Only use this together with offset if the file is too large to read at once."
+      },
+      "ranges": {
+        "type": "array",
+        "description": "Optional: multiple inclusive line ranges to read in one call. This block is only used when both offset and limit are omitted, and is ignored for Copilot chat session resource files.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "startLine": {
+              "type": "number",
+              "description": "The inclusive 1-based start line for this range."
+            },
+            "endLine": {
+              "type": "number",
+              "description": "Optional inclusive 1-based end line for this range. If omitted, only startLine is read."
+            }
+          },
+          "required": [
+            "startLine"
+          ]
+        }
+      },
+      "includeLineNumbers": {
+        "type": "boolean",
+        "description": "Optional: when using ranges mode, include source line numbers in the result. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
+      },
+      "numberBlankLines": {
+        "type": "boolean",
+        "description": "Optional: when using ranges mode with includeLineNumbers, also include line numbers for blank lines. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
+      },
+      "includeRangeHeaders": {
+        "type": "boolean",
+        "description": "Optional: when using ranges mode, add text headers like '--- lines 10-20 ---' before each range block. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
             }
           },
           "required": [

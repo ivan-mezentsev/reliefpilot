@@ -18,6 +18,23 @@ suite('Read File Tool Test Suite', function () {
 	const binaryFilePath = path.join(tmpDir, 'sample.bin');
 	const largeFilePath = path.join(tmpDir, 'large.txt');
 	const outsideFilePath = path.join(os.tmpdir(), `reliefpilot-read-file-${Date.now()}.txt`);
+	const copilotSessionWorkspacePath = path.join(
+		os.homedir(),
+		'Library',
+		'Application Support',
+		'Code',
+		'User',
+		'workspaceStorage',
+		`reliefpilot-read-file-session-${Date.now()}`,
+	);
+	const copilotSessionResourceFilePath = path.join(
+		copilotSessionWorkspacePath,
+		'GitHub.copilot-chat',
+		'chat-session-resources',
+		'test-session',
+		'test-call',
+		'content.txt',
+	);
 	const tool = new ReadFileTool();
 	const lmTool = new ReadFileLanguageModelTool();
 
@@ -47,10 +64,20 @@ suite('Read File Tool Test Suite', function () {
 			vscode.Uri.file(outsideFilePath),
 			Buffer.from('outside\nworkspace\n', 'utf8'),
 		);
+		await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(copilotSessionResourceFilePath)));
+		await vscode.workspace.fs.writeFile(
+			vscode.Uri.file(copilotSessionResourceFilePath),
+			Buffer.from('alpha\nbeta\n\ngamma', 'utf8'),
+		);
 	});
 
 	suiteTeardown(async function () {
 		await vscode.workspace.fs.delete(vscode.Uri.file(tmpDir), { recursive: true });
+		try {
+			await vscode.workspace.fs.delete(vscode.Uri.file(copilotSessionWorkspacePath), { recursive: true });
+		} catch {
+			// Ignore cleanup errors for the temporary Copilot session resource path.
+		}
 		try {
 			await vscode.workspace.fs.delete(vscode.Uri.file(outsideFilePath));
 		} catch {
@@ -81,6 +108,56 @@ suite('Read File Tool Test Suite', function () {
 		const response = await tool.execute({ filePath: textFilePath, offset: 2, limit: 4 });
 
 		assert.strictEqual(response.text, 'line 2\n\nline 4\nline 5');
+	});
+
+	test('reads multiple ranges with numbered blank lines and structured output', async function () {
+		const response = await tool.execute({
+			filePath: textFilePath,
+			ranges: [
+				{ startLine: 2, endLine: 4 },
+				{ startLine: 5 },
+			],
+			includeLineNumbers: true,
+			numberBlankLines: true,
+			includeRangeHeaders: true,
+		});
+
+		assert.strictEqual(response.filePath, textFilePath);
+		assert.strictEqual(
+			response.text,
+			'--- lines 2-4 ---\n2\tline 2\n3\t\n4\tline 4\n\n--- lines 5-5 ---\n5\tline 5',
+		);
+		assert.deepStrictEqual(response.ranges, [
+			{
+				startLine: 2,
+				endLine: 4,
+				lines: [
+					{ lineNumber: 2, text: 'line 2', isBlank: false },
+					{ lineNumber: 3, text: '', isBlank: true },
+					{ lineNumber: 4, text: 'line 4', isBlank: false },
+				],
+			},
+			{
+				startLine: 5,
+				endLine: 5,
+				lines: [
+					{ lineNumber: 5, text: 'line 5', isBlank: false },
+				],
+			},
+		]);
+	});
+
+	test('ignores the new range block when legacy limit is provided', async function () {
+		const response = await tool.execute({
+			filePath: textFilePath,
+			limit: 2,
+			ranges: [{ startLine: 4, endLine: 5 }],
+			includeLineNumbers: true,
+			includeRangeHeaders: true,
+		});
+
+		assert.strictEqual(response.text, 'line 1\nline 2');
+		assert.strictEqual(response.ranges, undefined);
 	});
 
 	test('returns an empty-file message for empty files', async function () {
@@ -122,43 +199,13 @@ suite('Read File Tool Test Suite', function () {
 	});
 
 	test('prepareInvocation does not request confirmation for Copilot chat session resource files', async function () {
-		const internalResourcePath = path.join(
-			os.homedir(),
-			'Library',
-			'Application Support',
-			'Code',
-			'User',
-			'workspaceStorage',
-			'test-workspace',
-			'GitHub.copilot-chat',
-			'chat-session-resources',
-			'test-session',
-			'test-call',
-			'content.txt',
-		);
-
-		const prepared = lmTool.prepareInvocation({ input: { filePath: internalResourcePath } } as any);
+		const prepared = lmTool.prepareInvocation({ input: { filePath: copilotSessionResourceFilePath } } as any);
 
 		assert.ok(!prepared.confirmationMessages);
 	});
 
 	test('prepareInvocation renders a compact one-line message for Copilot chat session resource files', async function () {
-		const internalResourcePath = path.join(
-			os.homedir(),
-			'Library',
-			'Application Support',
-			'Code',
-			'User',
-			'workspaceStorage',
-			'test-workspace',
-			'GitHub.copilot-chat',
-			'chat-session-resources',
-			'test-session',
-			'test-call',
-			'content.txt',
-		);
-
-		const prepared = lmTool.prepareInvocation({ input: { filePath: internalResourcePath, offset: 10, limit: 25 } } as any);
+		const prepared = lmTool.prepareInvocation({ input: { filePath: copilotSessionResourceFilePath, offset: 10, limit: 25 } } as any);
 		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
 
 		assert.ok(!prepared.confirmationMessages);
@@ -168,6 +215,18 @@ suite('Read File Tool Test Suite', function () {
 		assert.match(invocationValue, /\[⏸\]\(command:reliefpilot\.haltForFeedback\)$/);
 		assert.ok(!invocationValue.includes('\n'));
 		assert.ok(!invocationValue.includes('- Path:'));
+	});
+
+	test('ignores the new range block for Copilot chat session resource files', async function () {
+		const response = await tool.execute({
+			filePath: copilotSessionResourceFilePath,
+			ranges: [{ startLine: 2, endLine: 3 }],
+			includeLineNumbers: true,
+			includeRangeHeaders: true,
+		});
+
+		assert.strictEqual(response.text, 'alpha\nbeta\n\ngamma');
+		assert.strictEqual(response.ranges, undefined);
 	});
 
 	test('throws a real error for missing files instead of returning success text', async function () {
