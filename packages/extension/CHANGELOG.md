@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 - 2026-05-04
+
+- feat(pr_read_file): enhance file reading capabilities with range support
+
 ## 1.3.0 - 2026-05-04
 
 - feat(read_file): add tool for reading file contents with offset and limit
