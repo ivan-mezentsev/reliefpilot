@@ -199,6 +199,14 @@ function normalizeOffset(value: unknown): number | undefined {
 		throw new Error('offset must be an integer.');
 	}
 
+	if (value === 0) {
+		throw new Error('offset must not be 0. Omit offset to read from the beginning, use a positive offset to read from a 1-indexed line or byte, or use -1 for tail mode.');
+	}
+
+	if (value < -1) {
+		throw new Error('offset must be a positive integer or -1 for tail mode. Other negative offsets are not supported.');
+	}
+
 	return value;
 }
 
@@ -259,6 +267,16 @@ function hasLegacyRangeRequest(input: ReadFileInput): boolean {
 	return input.offset !== undefined || input.limit !== undefined;
 }
 
+function validateReadMode(input: ReadFileInput | undefined): void {
+	if (!input) {
+		return;
+	}
+
+	if (input.ranges !== undefined && hasLegacyRangeRequest(input)) {
+		throw new Error('Use either offset/limit or ranges, not both.');
+	}
+}
+
 function getAdvancedReadOptions(
 	input: ReadFileInput,
 	uri: vscode.Uri | undefined,
@@ -287,20 +305,28 @@ function getAdvancedReadOptions(
 function getTextRange(
 	totalLines: number,
 	input: ReadFileInput,
+	documentText: string,
 ): { startLine: number; endLine: number; truncated: boolean } {
 	const offset = normalizeOffset(input.offset);
 	const requestedLimit = normalizeLimit(input.limit);
+	if (offset === -1) {
+		const tailEndLine = documentText.endsWith('\n') && totalLines > 1
+			? totalLines - 1
+			: totalLines;
+		const effectiveLimit = clamp(requestedLimit ?? 1, 1, MAX_LINES_PER_READ);
+		return {
+			startLine: clamp(tailEndLine - effectiveLimit + 1, 1, tailEndLine),
+			endLine: tailEndLine,
+			truncated: false,
+		};
+	}
 
 	if (offset !== undefined && offset > totalLines) {
 		throw new Error(`Invalid offset ${offset}: file only has ${totalLines} line${totalLines === 1 ? '' : 's'}. Line numbers are 1-indexed.`);
 	}
 
 	const effectiveLimit = clamp(requestedLimit ?? Number.POSITIVE_INFINITY, 1, MAX_LINES_PER_READ);
-	const requestedStartLine = offset === undefined
-		? 1
-		: offset < 0
-			? totalLines + offset + 1
-			: offset;
+	const requestedStartLine = offset ?? 1;
 	const startLine = clamp(requestedStartLine, 1, totalLines);
 	const endLine = clamp(startLine + effectiveLimit - 1, 1, totalLines);
 	return {
@@ -332,11 +358,20 @@ function getBinaryByteRange(
 ): { startByte: number; endByte: number; truncated: boolean } {
 	const offset = normalizeOffset(input.offset);
 	const limit = normalizeLimit(input.limit);
+	if (offset === -1) {
+		const requestedLength = limit ?? 1;
+		const effectiveLength = Math.min(requestedLength, MAX_BINARY_HEXDUMP_BYTES);
+		const startByte = Math.max(totalBytes - effectiveLength, 0);
+		return {
+			startByte,
+			endByte: totalBytes,
+			truncated: requestedLength > effectiveLength && startByte > 0,
+		};
+	}
+
 	let requestedStartByte = offset === undefined
 		? 0
-		: offset < 0
-			? Math.max(totalBytes + offset, 0)
-			: offset;
+		: offset;
 	let requestedEndByte = offset !== undefined && limit !== undefined
 		? requestedStartByte + limit
 		: requestedStartByte + 128;
@@ -727,6 +762,7 @@ export class ReadFileTool {
 			return buildReadFileToolResponse(vscode.Uri.file(input.filePath), 'Operation cancelled.');
 		}
 
+		validateReadMode(input);
 		const uri = await resolveReadFileUri(input.filePath);
 		const fileData = await getReadableFileData(uri);
 
@@ -761,7 +797,7 @@ export class ReadFileTool {
 			);
 		}
 
-		const { startLine, endLine, truncated } = getTextRange(totalLines, input);
+		const { startLine, endLine, truncated } = getTextRange(totalLines, input, documentText);
 
 		let content = getDocumentRangeText(fileData.document, startLine, endLine);
 		if (truncated) {
@@ -819,6 +855,7 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 	): PreparedToolInvocation {
 		const rawFilePath = typeof options.input?.filePath === 'string' ? options.input.filePath.trim() : '<missing-filePath>';
 		const directUri = tryParseDirectUri(rawFilePath);
+		validateReadMode(options.input);
 		const offset = normalizeOffset(options.input?.offset);
 		const limit = normalizeLimit(options.input?.limit);
 		const advancedOptions = getAdvancedReadOptions(options.input, directUri);

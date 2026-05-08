@@ -13,6 +13,7 @@ suite('Read File Tool Test Suite', function () {
 
 	const tmpDir = path.join(__dirname, '../../test-tmp-read-file');
 	const textFilePath = path.join(tmpDir, 'sample.txt');
+	const trailingNewlineFilePath = path.join(tmpDir, 'trailing-newline.txt');
 	const emptyFilePath = path.join(tmpDir, 'empty.txt');
 	const whitespaceFilePath = path.join(tmpDir, 'whitespace.txt');
 	const binaryFilePath = path.join(tmpDir, 'sample.bin');
@@ -43,6 +44,10 @@ suite('Read File Tool Test Suite', function () {
 		await vscode.workspace.fs.writeFile(
 			vscode.Uri.file(textFilePath),
 				Buffer.from('line 1\nline 2\n\nline 4\nline 5', 'utf8'),
+		);
+		await vscode.workspace.fs.writeFile(
+			vscode.Uri.file(trailingNewlineFilePath),
+			Buffer.from('tail 1\ntail 2\ntail 3\n', 'utf8'),
 		);
 		await vscode.workspace.fs.writeFile(
 			vscode.Uri.file(emptyFilePath),
@@ -116,16 +121,23 @@ suite('Read File Tool Test Suite', function () {
 		assert.strictEqual(response.text, 'line 5');
 	});
 
-	test('reads a text file chunk from the end via negative offset and limit', async function () {
-		const response = await tool.execute({ filePath: textFilePath, offset: -3, limit: 2 });
+	test('reads final text lines via tail mode and limit', async function () {
+		const response = await tool.execute({ filePath: textFilePath, offset: -1, limit: 3 });
 
-		assert.strictEqual(response.text, '\nline 4');
+		assert.strictEqual(response.text, '\nline 4\nline 5');
 	});
 
-	test('clamps negative text offsets before the beginning of the file', async function () {
-		const response = await tool.execute({ filePath: textFilePath, offset: -10, limit: 2 });
+	test('reads final content lines via tail mode when the file ends with a newline', async function () {
+		const response = await tool.execute({ filePath: trailingNewlineFilePath, offset: -1, limit: 2 });
 
-		assert.strictEqual(response.text, 'line 1\nline 2');
+		assert.strictEqual(response.text, 'tail 2\ntail 3');
+	});
+
+	test('throws for negative text offsets other than tail mode', async function () {
+		await assert.rejects(
+			() => tool.execute({ filePath: textFilePath, offset: -2, limit: 2 }),
+			/offset must be a positive integer or -1 for tail mode\. Other negative offsets are not supported\./,
+		);
 	});
 
 	test('reads multiple ranges with numbered blank lines and structured output', async function () {
@@ -165,17 +177,17 @@ suite('Read File Tool Test Suite', function () {
 		]);
 	});
 
-	test('ignores the new range block when legacy limit is provided', async function () {
-		const response = await tool.execute({
-			filePath: textFilePath,
-			limit: 2,
-			ranges: [{ startLine: 4, endLine: 5 }],
-			includeLineNumbers: true,
-			includeRangeHeaders: true,
-		});
-
-		assert.strictEqual(response.text, 'line 1\nline 2');
-		assert.strictEqual(response.ranges, undefined);
+	test('throws when offset/limit mode is combined with ranges mode', async function () {
+		await assert.rejects(
+			() => tool.execute({
+				filePath: textFilePath,
+				limit: 2,
+				ranges: [{ startLine: 4, endLine: 5 }],
+				includeLineNumbers: true,
+				includeRangeHeaders: true,
+			}),
+			/Use either offset\/limit or ranges, not both\./,
+		);
 	});
 
 	test('returns an empty-file message for empty files', async function () {
@@ -198,8 +210,8 @@ suite('Read File Tool Test Suite', function () {
 		assert.match(response.text, /Z/);
 	});
 
-	test('reads a binary file from the end via negative byte offset', async function () {
-		const response = await tool.execute({ filePath: binaryFilePath, offset: -2, limit: 2 });
+	test('reads a binary file tail via negative byte offset', async function () {
+		const response = await tool.execute({ filePath: binaryFilePath, offset: -1, limit: 2 });
 
 		assert.match(response.text, /00000006/);
 		assert.match(response.text, /ff fe/);
@@ -215,8 +227,8 @@ suite('Read File Tool Test Suite', function () {
 		assert.doesNotMatch(response.text, /^line 2001$/m);
 	});
 
-	test('reads the tail of a large file via negative offset without default truncation', async function () {
-		const response = await tool.execute({ filePath: largeFilePath, offset: -2 });
+	test('reads the tail of a large file via tail mode without default truncation', async function () {
+		const response = await tool.execute({ filePath: largeFilePath, offset: -1, limit: 2 });
 
 		assert.strictEqual(response.text, 'line 2504\nline 2505');
 	});
@@ -275,10 +287,11 @@ suite('Read File Tool Test Suite', function () {
 		);
 	});
 
-	test('clamps offset 0 to the beginning of the file like the reference implementation', async function () {
-		const response = await tool.execute({ filePath: textFilePath, offset: 0, limit: 2 });
-
-		assert.strictEqual(response.text, 'line 1\nline 2');
+	test('throws when offset is 0', async function () {
+		await assert.rejects(
+			() => tool.execute({ filePath: textFilePath, offset: 0, limit: 2 }),
+			/offset must not be 0\./,
+		);
 	});
 
 	test('isUriInsideWorkspaceFolders detects workspace membership', function () {

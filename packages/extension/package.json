@@ -326,7 +326,7 @@
       {
         "name": "rp_read_file",
         "displayName": "RP Read file",
-        "modelDescription": "Read the contents of a file. Line numbers are 1-indexed. This tool truncates output at 2000 lines and can be called repeatedly with optional offset and limit parameters to read larger files in chunks. A negative offset counts backward from the end of the file, for example -1 starts at the last line. Binary files use offset and limit as byte offsets, with negative offsets counted from the end in bytes. When both offset and limit are omitted for a normal file, you can instead pass ranges to read multiple inclusive line ranges in one call, optionally include line numbers, number blank lines, and add range headers.",
+        "modelDescription": "Read the contents of a file. Line numbers are 1-indexed. This tool truncates output at 2000 lines. Use exactly one mode: offset/limit or ranges; using both is invalid. In offset/limit mode, use a positive offset to start at a specific line, or use offset=-1 for tail mode where limit controls how many final lines to read. Other negative offsets and offset=0 are invalid. Binary files use offset and limit as byte ranges; offset=-1 reads the last limit bytes. In ranges mode, read multiple inclusive line ranges in one call, optionally include line numbers, number blank lines, and add range headers.",
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "rp_read_file",
         "icon": "icon.png",
@@ -339,15 +339,15 @@
             },
             "offset": {
               "type": "number",
-              "description": "Optional: the 1-based line number to start reading from. Negative values count backward from the end of the file (-1 is the last line). Binary files use byte offsets with -1 as the last byte. Only use this if the file is too large to read at once. If not specified, the file will be read from the beginning."
+              "description": "Optional: a positive 1-based line number to start reading from, or -1 for tail mode. In tail mode, limit controls how many final lines are returned; if limit is omitted, only the final line is returned. Binary files use byte offsets; offset=-1 reads the last limit bytes. Offset 0 and negative offsets other than -1 are invalid. Do not use with ranges. If not specified, the file will be read from the beginning."
             },
             "limit": {
               "type": "number",
-              "description": "Optional: the maximum number of lines to read. Only use this together with offset if the file is too large to read at once."
+              "description": "Optional: the maximum number of lines to read in offset/limit mode. With offset=-1, this is the number of final lines to return. Binary files use this as a byte count. Do not use with ranges."
             },
             "ranges": {
               "type": "array",
-              "description": "Optional: multiple inclusive line ranges to read in one call. This block is only used when both offset and limit are omitted, and is ignored for Copilot chat session resource files.",
+              "description": "Optional: multiple inclusive line ranges to read in one call. Use ranges mode only when both offset and limit are omitted; using ranges with offset or limit is invalid. This block is ignored for Copilot chat session resource files.",
               "items": {
                 "type": "object",
                 "properties": {
