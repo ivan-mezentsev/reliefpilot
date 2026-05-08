@@ -141,15 +141,9 @@ async function copyKatexAssets() {
 
 async function copyJsdomSyncWorker() {
   try {
-    const target = path.join(__dirname, "dist", "xhr-sync-worker.js");
-    const jsdomPath = resolveOptionalModule("jsdom");
-    if (!jsdomPath) {
-      fs.rmSync(target, { force: true });
-      return;
-    }
-
     // Find the xhr-sync-worker.js file from jsdom
     // require.resolve('jsdom') returns path like: /path/to/node_modules/jsdom/lib/api.js
+    const jsdomPath = require.resolve("jsdom");
     // Get node_modules/jsdom directory
     const jsdomDir = path.dirname(path.dirname(jsdomPath));
     const src = path.join(
@@ -160,6 +154,7 @@ async function copyJsdomSyncWorker() {
       "xhr",
       "xhr-sync-worker.js",
     );
+    const target = path.join(__dirname, "dist", "xhr-sync-worker.js");
 
     // Ensure dist directory exists
     const distDir = path.dirname(target);
@@ -179,14 +174,8 @@ async function copyJsdomSyncWorker() {
 
 async function copyJsdomSyncWorkerForTests() {
   try {
-    const target = path.join(__dirname, "out", "xhr-sync-worker.js");
-    const jsdomPath = resolveOptionalModule("jsdom");
-    if (!jsdomPath) {
-      fs.rmSync(target, { force: true });
-      return;
-    }
-
     // Find the xhr-sync-worker.js file from jsdom
+    const jsdomPath = require.resolve("jsdom");
     const jsdomDir = path.dirname(path.dirname(jsdomPath));
     const src = path.join(
       jsdomDir,
@@ -196,6 +185,7 @@ async function copyJsdomSyncWorkerForTests() {
       "xhr",
       "xhr-sync-worker.js",
     );
+    const target = path.join(__dirname, "out", "xhr-sync-worker.js");
 
     // Ensure out directory exists
     const outDir = path.dirname(target);
@@ -210,17 +200,5 @@ async function copyJsdomSyncWorkerForTests() {
       "[build] unable to copy xhr-sync-worker.js",
       e && e.message ? e.message : e,
     );
-  }
-}
-
-function resolveOptionalModule(moduleName) {
-  try {
-    return require.resolve(moduleName);
-  } catch (e) {
-    if (e && e.code === "MODULE_NOT_FOUND") {
-      return undefined;
-    }
-
-    throw e;
   }
 }
