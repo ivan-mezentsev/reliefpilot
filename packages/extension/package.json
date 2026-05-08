@@ -62,7 +62,7 @@
     "NOTICE"
   ],
   "engines": {
-    "vscode": ">=1.100.0"
+    "vscode": ">=1.110.0"
   },
   "repository": {
     "type": "git",
@@ -1283,9 +1283,8 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "vscode:prepublish": "pnpm package",
     "prepackage-extension": "pnpm run generate:icon",
-    "package-extension": "cross-env npm_config_user_agent=pnpm vsce package --no-dependencies",
+    "package-extension": "pnpm package && vsce package --no-dependencies",
     "generate:icon": "node scripts/generate_icon.js",
     "compile": "pnpm check-types && node build.js",
     "check-types": "tsc --noEmit",
@@ -1298,30 +1297,29 @@
     "package": "pnpm check-types && node build.js --production"
   },
   "devDependencies": {
-    "@types/jsdom": "^27.0.0",
+    "@types/jsdom": "^28.0.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^22.19.0",
-    "@types/vscode": "^1.100.0",
+    "@types/node": "^25.6.2",
+    "@types/vscode": "1.110.0",
     "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.4.1",
-    "@vscode/vsce": "^3.6.2",
-    "cross-env": "^10.1.0",
-    "sharp": "^0.34.4",
-    "typescript": "^5.9.3"
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.1",
+    "sharp": "^0.34.5",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@nanocollective/get-md": "^1.0.1",
-    "@vscode/prompt-tsx": "^0.4.0-alpha.8",
-    "esbuild": "^0.25.12",
-    "highlight.js": "^11.10.0",
-    "isbinaryfile": "^5.0.6",
+    "@nanocollective/get-md": "1.0.3",
+    "@vscode/prompt-tsx": "0.4.0-alpha.8",
+    "esbuild": "^0.28.0",
+    "gpt-tokenizer": "^3.4.0",
+    "highlight.js": "^11.11.1",
+    "isbinaryfile": "^6.0.0",
     "katex": "0.16.45",
-    "marked": "16.4.1",
-    "mermaid": "^11.11.0",
+    "marked": "18.0.3",
+    "mermaid": "^11.14.0",
     "p-wait-for": "^6.0.0",
-    "zod": "^4.1.12",
-    "parse5": "^8.0.0",
-    "gpt-tokenizer": "^3.4.0"
+    "parse5": "^8.0.1",
+    "zod": "^4.4.3"
   },
   "packageManager": "pnpm@10.6.1+sha512.40ee09af407fa9fbb5fbfb8e1cb40fbb74c0af0c3e10e9224d7b53c7658528615b2c92450e74cfad91e3a2dcafe3ce4050d80bda71d757756d2ce2b66213e9a3"
 }

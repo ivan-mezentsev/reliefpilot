@@ -2,7 +2,15 @@
   "name": "reliefpilot-workspace",
   "private": true,
   "packageManager": "pnpm@10.6.1",
+  "engines": {
+    "node": ">=26.0.0"
+  },
   "scripts": {
     "clean": "node scripts/clean-repo.js"
+  },
+  "pnpm": {
+    "overrides": {
+      "jwa@<1.4.2": "1.4.2"
+    }
   }
 }
