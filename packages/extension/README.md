@@ -131,10 +131,10 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    ![IDE tools configuration](https://github.com/ivan-mezentsev/reliefpilot/raw/master/docs/tools_setup.png)
 3. Recommended rules for AI agents:
 
-   ```markdown
+  ```markdown
    ## Language & Communication
 
-   - **Web search**: DuckDuckGo/Google/Linkup/Exa queries in English principally
+   - **Web search**: Google/DuckDuckGo/Linkup/Exa queries in English principally
 
    ## Code Development
 
@@ -218,7 +218,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
 
    - After edits: run code checks (`code_checker`).
    - Report briefly: PASS/FAIL, list of changed keys/files, and a one-line requirements coverage (Done/Deferred + reason).
-   ```
+  ```
 
 4. Stock up on tokens — you'll need them for maximum comfort:
 
