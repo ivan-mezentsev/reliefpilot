@@ -1,17 +1,17 @@
-import * as path from 'node:path';
 import {
-	BasePromptElementProps,
-	PromptElement,
-	type PromptPiece,
-	renderElementJSON,
+    BasePromptElementProps,
+    PromptElement,
+    type PromptPiece,
+    renderElementJSON,
 } from '@vscode/prompt-tsx';
 import { isBinaryFile } from 'isbinaryfile';
+import * as path from 'node:path';
 import type {
-	CancellationToken,
-	LanguageModelTool,
-	LanguageModelToolInvocationOptions,
-	LanguageModelToolInvocationPrepareOptions,
-	PreparedToolInvocation,
+    CancellationToken,
+    LanguageModelTool,
+    LanguageModelToolInvocationOptions,
+    LanguageModelToolInvocationPrepareOptions,
+    PreparedToolInvocation,
 } from 'vscode';
 import * as vscode from 'vscode';
 import { env } from '../utils/env';
@@ -195,8 +195,8 @@ function normalizeOffset(value: unknown): number | undefined {
 		return undefined;
 	}
 
-	if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-		throw new Error('offset must be a non-negative integer.');
+	if (typeof value !== 'number' || !Number.isInteger(value)) {
+		throw new Error('offset must be an integer.');
 	}
 
 	return value;
@@ -296,7 +296,12 @@ function getTextRange(
 	}
 
 	const effectiveLimit = clamp(requestedLimit ?? Number.POSITIVE_INFINITY, 1, MAX_LINES_PER_READ);
-	const startLine = clamp(offset ?? 1, 1, totalLines);
+	const requestedStartLine = offset === undefined
+		? 1
+		: offset < 0
+			? totalLines + offset + 1
+			: offset;
+	const startLine = clamp(requestedStartLine, 1, totalLines);
 	const endLine = clamp(startLine + effectiveLimit - 1, 1, totalLines);
 	return {
 		startLine,
@@ -327,9 +332,13 @@ function getBinaryByteRange(
 ): { startByte: number; endByte: number; truncated: boolean } {
 	const offset = normalizeOffset(input.offset);
 	const limit = normalizeLimit(input.limit);
-	let requestedStartByte = offset ?? 0;
+	let requestedStartByte = offset === undefined
+		? 0
+		: offset < 0
+			? Math.max(totalBytes + offset, 0)
+			: offset;
 	let requestedEndByte = offset !== undefined && limit !== undefined
-		? offset + limit
+		? requestedStartByte + limit
 		: requestedStartByte + 128;
 	if (requestedStartByte > requestedEndByte) {
 		[requestedStartByte, requestedEndByte] = [requestedEndByte, requestedStartByte];

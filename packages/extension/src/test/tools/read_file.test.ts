@@ -3,9 +3,9 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
-	isUriInsideWorkspaceFolders,
-	ReadFileLanguageModelTool,
-	ReadFileTool,
+    isUriInsideWorkspaceFolders,
+    ReadFileLanguageModelTool,
+    ReadFileTool,
 } from '../../tools/read_file';
 
 suite('Read File Tool Test Suite', function () {
@@ -110,6 +110,24 @@ suite('Read File Tool Test Suite', function () {
 		assert.strictEqual(response.text, 'line 2\n\nline 4\nline 5');
 	});
 
+	test('reads a text file from the last line via negative offset', async function () {
+		const response = await tool.execute({ filePath: textFilePath, offset: -1 });
+
+		assert.strictEqual(response.text, 'line 5');
+	});
+
+	test('reads a text file chunk from the end via negative offset and limit', async function () {
+		const response = await tool.execute({ filePath: textFilePath, offset: -3, limit: 2 });
+
+		assert.strictEqual(response.text, '\nline 4');
+	});
+
+	test('clamps negative text offsets before the beginning of the file', async function () {
+		const response = await tool.execute({ filePath: textFilePath, offset: -10, limit: 2 });
+
+		assert.strictEqual(response.text, 'line 1\nline 2');
+	});
+
 	test('reads multiple ranges with numbered blank lines and structured output', async function () {
 		const response = await tool.execute({
 			filePath: textFilePath,
@@ -180,6 +198,14 @@ suite('Read File Tool Test Suite', function () {
 		assert.match(response.text, /Z/);
 	});
 
+	test('reads a binary file from the end via negative byte offset', async function () {
+		const response = await tool.execute({ filePath: binaryFilePath, offset: -2, limit: 2 });
+
+		assert.match(response.text, /00000006/);
+		assert.match(response.text, /ff fe/);
+		assert.doesNotMatch(response.text, /4d 5a/);
+	});
+
 	test('truncates a large file at 2000 lines by default', async function () {
 		const response = await tool.execute({ filePath: largeFilePath });
 
@@ -187,6 +213,12 @@ suite('Read File Tool Test Suite', function () {
 		assert.match(response.text, /^line 2000$/m);
 		assert.match(response.text, /\[File content truncated at line 2000\. Use rp_read_file with offset\/limit parameters to view more\.\]$/);
 		assert.doesNotMatch(response.text, /^line 2001$/m);
+	});
+
+	test('reads the tail of a large file via negative offset without default truncation', async function () {
+		const response = await tool.execute({ filePath: largeFilePath, offset: -2 });
+
+		assert.strictEqual(response.text, 'line 2504\nline 2505');
 	});
 
 	test('prepareInvocation requests confirmation for paths outside the workspace', async function () {
