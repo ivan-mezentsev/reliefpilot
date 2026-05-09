@@ -645,7 +645,9 @@ export class RipgrepLanguageModelTool implements LanguageModelTool<RipgrepInput>
     md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
     md.appendMarkdown(`Relief Pilot · **ripgrep**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`);
     md.appendMarkdown(`• Pattern: \`${pattern}\`  \n`);
-    md.appendMarkdown(`• CWD: \`${cwd}\`  \n`);
+    if (cwd !== workspaceRoot) {
+      md.appendMarkdown(`• CWD: \`${cwd}\`  \n`);
+    }
     if (paths.length > 0) {
       md.appendMarkdown(`• Paths: \`${paths.join(', ')}\`  \n`);
     }

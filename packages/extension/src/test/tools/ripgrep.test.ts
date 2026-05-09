@@ -16,6 +16,37 @@ suite('Ripgrep Tool Test Suite', function () {
 		} as any);
 		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
 
-		assert.match(invocationValue, /- Detail: `files` · glob: `\*\*\/set_env\.sh`/);
+		assert.match(invocationValue, /• Detail: `files` · glob: `\*\*\/set_env\.sh`/);
+	});
+
+	test('prepareInvocation hides CWD when it matches the workspace root', function () {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		assert.ok(workspaceRoot);
+
+		const prepared = lmTool.prepareInvocation({
+			input: {
+				pattern: 'needle',
+				cwd: workspaceRoot,
+			},
+		} as any);
+		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+
+		assert.doesNotMatch(invocationValue, /• CWD:/);
+	});
+
+	test('prepareInvocation shows CWD when it differs from the workspace root', function () {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		assert.ok(workspaceRoot);
+		const differentCwd = `${workspaceRoot}-other`;
+
+		const prepared = lmTool.prepareInvocation({
+			input: {
+				pattern: 'needle',
+				cwd: differentCwd,
+			},
+		} as any);
+		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+
+		assert.ok(invocationValue.includes(`• CWD: \`${differentCwd}\``));
 	});
 });
