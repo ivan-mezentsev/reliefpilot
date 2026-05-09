@@ -114,11 +114,26 @@ suite('List Directory Tool Test Suite', function () {
 
 	test('prepareInvocation requests confirmation for paths outside the workspace', async function () {
 		const prepared = lmTool.prepareInvocation({ input: { path: outsideDirPath } } as any);
+		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
 
 		assert.ok(prepared.confirmationMessages);
 		assert.strictEqual(prepared.confirmationMessages?.title, 'Read Directory Outside Workspace');
-		assert.match((prepared.invocationMessage as vscode.MarkdownString).value, /rp_list_directory/);
-		assert.match((prepared.invocationMessage as vscode.MarkdownString).value, /directory contents/);
+		assert.match(invocationValue, /rp_list_directory/);
+		assert.match(invocationValue, new RegExp(outsideDirPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+		assert.doesNotMatch(invocationValue, /Range/);
+		assert.doesNotMatch(invocationValue, /\[\]\(file:/);
+	});
+
+	test('prepareInvocation renders a clickable file widget path for workspace directories', async function () {
+		const prepared = lmTool.prepareInvocation({ input: { path: sampleDirPath } } as any);
+		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+
+		assert.ok(!prepared.confirmationMessages);
+		assert.match(invocationValue, /rp_list_directory/);
+		assert.match(invocationValue, new RegExp(sampleDirPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+		assert.match(invocationValue, /- Path: \[[^\]]+\]\(file:/);
+		assert.match(invocationValue, /vscodeLinkType%3Dskill/);
+		assert.doesNotMatch(invocationValue, /Range/);
 	});
 
 	test('prepareInvocation does not request confirmation for Copilot chat session resource directories', async function () {

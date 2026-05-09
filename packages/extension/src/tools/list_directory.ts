@@ -39,8 +39,17 @@ function escapeInlineCode(text: string): string {
 	return text.replace(/`/g, '\\`');
 }
 
+function escapeMarkdownLinkText(text: string): string {
+	return text.replace(/([\\\[\]])/g, '\\$1');
+}
+
 function toDisplayPath(uri: vscode.Uri): string {
 	return uri.scheme === 'file' ? uri.fsPath : uri.toString();
+}
+
+function formatUriForFileWidget(uri: vscode.Uri, linkText: string): string {
+	const uriWithQuery = uri.with({ query: 'vscodeLinkType=skill' });
+	return `[${escapeMarkdownLinkText(linkText)}](${uriWithQuery.toString()})`;
 }
 
 function tryParseDirectUri(rawPath: string): vscode.Uri | undefined {
@@ -137,6 +146,30 @@ async function resolveListDirectoryUri(rawPath: string): Promise<vscode.Uri> {
 	return resolveRelativePathInWorkspace(rawPath);
 }
 
+function tryResolvePathForInvocation(rawPath: string): vscode.Uri | undefined {
+	const directUri = tryParseDirectUri(rawPath);
+	if (directUri) {
+		return directUri;
+	}
+
+	const workspaceFolders = vscode.workspace.workspaceFolders;
+	if (!workspaceFolders || workspaceFolders.length !== 1) {
+		return undefined;
+	}
+
+	const [folder] = workspaceFolders;
+	const trimmed = rawPath.trim();
+	if (trimmed.length === 0) {
+		return undefined;
+	}
+
+	if (folder.uri.scheme === 'file') {
+		return vscode.Uri.file(path.resolve(folder.uri.fsPath, trimmed));
+	}
+
+	return vscode.Uri.joinPath(folder.uri, ...trimmed.split(/[\\/]+/).filter(Boolean));
+}
+
 function formatDirectoryEntry(name: string, type: vscode.FileType): string {
 	return `${name}${type === vscode.FileType.Directory ? '/' : ''}`;
 }
@@ -224,6 +257,11 @@ export class ListDirectoryLanguageModelTool implements LanguageModelTool<ListDir
 		options: LanguageModelToolInvocationPrepareOptions<ListDirectoryInput>,
 	): PreparedToolInvocation {
 		const rawPath = typeof options.input?.path === 'string' ? options.input.path.trim() : '<missing-path>';
+		const resolvedUri = tryResolvePathForInvocation(rawPath);
+		const displayPath = resolvedUri ? toDisplayPath(resolvedUri) : rawPath;
+		const pathPresentation = resolvedUri && isUriInsideWorkspaceFolders(resolvedUri)
+			? formatUriForFileWidget(resolvedUri, displayPath)
+			: `\`${escapeInlineCode(displayPath)}\``;
 		const showPauseButton = vscode.workspace
 			.getConfiguration('reliefpilot')
 			.get<boolean>('showPauseButtonInChat', true);
@@ -233,8 +271,7 @@ export class ListDirectoryLanguageModelTool implements LanguageModelTool<ListDir
 		const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
 		md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
 		md.appendMarkdown(`Relief Pilot · **rp_list_directory**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`);
-		md.appendMarkdown(`- Path: \`${escapeInlineCode(rawPath)}\`  \n`);
-		md.appendMarkdown('- Range: `directory contents`  \n');
+		md.appendMarkdown(`- Path: ${pathPresentation}  \n`);
 
 		const confirmationMessages = buildOutsideWorkspaceConfirmation(rawPath);
 		return confirmationMessages

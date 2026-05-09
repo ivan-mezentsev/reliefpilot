@@ -96,6 +96,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
   - **code_checker**: Retrieve current diagnostics for your code
   - **focus_editor**: Focus specific locations within files
   - **rp_read_file**: Read files with the same functionality as the built-in version, plus extra control and Halt for Feedback integration.
+  - **rp_list_directory**: List directory contents with the same functionality as the built-in version, plus extra control and Halt for Feedback integration.
 - Local Search:
   - **ripgrep**: Fast, index-independent search that ignores .git/info/exclude rules (uses the rg binary)
 - The Crown Jewel of the Extension:
