@@ -313,7 +313,8 @@ export class ExecuteCommandLanguageModelTool implements LanguageModelTool<Execut
     const newTerminal = hasNewTerminal && typeof input.newTerminal === "boolean" ? input.newTerminal : undefined
     const destructiveFlag = typeof input.destructiveFlag === "boolean" ? input.destructiveFlag : undefined
     const background = typeof input.background === "boolean" ? input.background : undefined
-    const timeout = typeof (input as any).timeout === "number" ? (input as any).timeout : undefined
+    const hasTimeout = Object.prototype.hasOwnProperty.call(input, "timeout")
+    const timeout = hasTimeout && typeof input.timeout === "number" ? input.timeout : undefined
 
     const md = new vscode.MarkdownString(undefined, true)
     md.supportHtml = true
@@ -352,9 +353,9 @@ export class ExecuteCommandLanguageModelTool implements LanguageModelTool<Execut
 
     // Keep remaining fields compact; these are single-line values.
     if (customCwd) md.appendMarkdown(`• CWD: ${inlineCode(customCwd)}  \n`)
-    if (typeof newTerminal === "boolean") md.appendMarkdown(`• New terminal: ${inlineCode(String(newTerminal))}  \n`)
-    if (typeof destructiveFlag === "boolean") md.appendMarkdown(`• Destructive: ${inlineCode(String(destructiveFlag))}  \n`)
-    if (typeof background === "boolean") md.appendMarkdown(`• Background: ${inlineCode(String(background))}  \n`)
+    if (newTerminal === true) md.appendMarkdown(`• New terminal: ${inlineCode(String(newTerminal))}  \n`)
+    if (destructiveFlag === true) md.appendMarkdown(`• Destructive: ${inlineCode(String(destructiveFlag))}  \n`)
+    if (background === true) md.appendMarkdown(`• Background: ${inlineCode(String(background))}  \n`)
     if (typeof timeout === "number") md.appendMarkdown(`• Timeout: ${inlineCode(`${timeout}ms`)}  \n`)
 
     return { invocationMessage: md }

@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ExecuteCommandTool } from '../../tools/execute_command';
+import { ExecuteCommandLanguageModelTool, ExecuteCommandTool } from '../../tools/execute_command';
 
 // Extend ExecuteCommandTool to override the ask method for testing
 class TestableExecuteCommandTool extends ExecuteCommandTool {
@@ -25,6 +25,45 @@ suite('Execute Command Tool Test Suite', function () {
   const tmpDir = path.join(__dirname, '../../test-tmp');
   let tool: TestableExecuteCommandTool; // Use the testable version for all tests
   let originalConfirmSetting: boolean;
+
+  suite('prepareInvocation', function () {
+    const lmTool = new ExecuteCommandLanguageModelTool();
+
+    test('shows true flags and explicitly provided timeout', function () {
+      const prepared = lmTool.prepareInvocation({
+        input: {
+          command: 'echo "hello"',
+          newTerminal: true,
+          destructiveFlag: true,
+          background: true,
+          timeout: 1000,
+        },
+      } as any);
+      const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+
+      assert.match(invocationValue, /• New terminal: `true`/);
+      assert.match(invocationValue, /• Destructive: `true`/);
+      assert.match(invocationValue, /• Background: `true`/);
+      assert.match(invocationValue, /• Timeout: `1000ms`/);
+    });
+
+    test('hides false flags and omitted timeout', function () {
+      const prepared = lmTool.prepareInvocation({
+        input: {
+          command: 'echo "hello"',
+          newTerminal: false,
+          destructiveFlag: false,
+          background: false,
+        },
+      } as any);
+      const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+
+      assert.doesNotMatch(invocationValue, /• New terminal:/);
+      assert.doesNotMatch(invocationValue, /• Destructive:/);
+      assert.doesNotMatch(invocationValue, /• Background:/);
+      assert.doesNotMatch(invocationValue, /• Timeout:/);
+    });
+  });
 
   suiteSetup(async function () {
     console.log('Test setup - workspace folders:', vscode.workspace.workspaceFolders);
