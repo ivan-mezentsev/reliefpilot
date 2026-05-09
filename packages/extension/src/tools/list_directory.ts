@@ -271,7 +271,7 @@ export class ListDirectoryLanguageModelTool implements LanguageModelTool<ListDir
 		const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
 		md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
 		md.appendMarkdown(`Relief Pilot · **rp_list_directory**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`);
-		md.appendMarkdown(`• Path: ${pathPresentation}  \n`);
+		md.appendMarkdown(`${pathPresentation}  \n`);
 
 		const confirmationMessages = buildOutsideWorkspaceConfirmation(rawPath);
 		return confirmationMessages

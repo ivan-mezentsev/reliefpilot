@@ -264,14 +264,14 @@ suite('Read File Tool Test Suite', function () {
 	test('prepareInvocation requests confirmation for paths outside the workspace', async function () {
 		const prepared = lmTool.prepareInvocation({ input: { filePath: outsideFilePath } } as any);
 		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
-			const pathLine = invocationValue.split('\n').find((line) => line.startsWith('- Path: '));
+		const pathLine = invocationValue.split('\n').find((line) => line.includes(outsideFilePath));
 
 		assert.ok(prepared.confirmationMessages);
 		assert.strictEqual(prepared.confirmationMessages?.title, 'Read File Outside Workspace');
 		assert.match(invocationValue, /rp_read_file/);
 		assert.match(invocationValue, new RegExp(outsideFilePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 		assert.doesNotMatch(invocationValue, /Range/);
-			assert.strictEqual(pathLine, `- Path: \`${outsideFilePath}\`  `);
+		assert.strictEqual(pathLine, `\`${outsideFilePath}\`  `);
 	});
 
 	test('prepareInvocation renders a clickable file widget path for workspace files', async function () {
@@ -281,7 +281,7 @@ suite('Read File Tool Test Suite', function () {
 		assert.ok(!prepared.confirmationMessages);
 		assert.match(invocationValue, /rp_read_file/);
 		assert.match(invocationValue, new RegExp(textFilePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-		assert.match(invocationValue, /- Path: \[[^\]]+\]\(file:/);
+		assert.match(invocationValue, /\[[^\]]+\]\(file:/);
 		assert.match(invocationValue, /vscodeLinkType%3Dskill/);
 		assert.doesNotMatch(invocationValue, /Range/);
 	});
@@ -301,8 +301,8 @@ suite('Read File Tool Test Suite', function () {
 		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
 
 		assert.ok(!prepared.confirmationMessages);
-		assert.match(invocationValue, /- Offset: `2`/);
-		assert.match(invocationValue, /- Limit: `2`/);
+		assert.match(invocationValue, /Offset: `2`/);
+		assert.match(invocationValue, /Limit: `2`/);
 		assert.doesNotMatch(invocationValue, /Ranges/);
 	});
 

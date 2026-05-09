@@ -131,7 +131,7 @@ suite('List Directory Tool Test Suite', function () {
 		assert.ok(!prepared.confirmationMessages);
 		assert.match(invocationValue, /rp_list_directory/);
 		assert.match(invocationValue, new RegExp(sampleDirPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-		assert.match(invocationValue, /- Path: \[[^\]]+\]\(file:/);
+		assert.match(invocationValue, /\[[^\]]+\]\(file:/);
 		assert.match(invocationValue, /vscodeLinkType%3Dskill/);
 		assert.doesNotMatch(invocationValue, /Range/);
 	});

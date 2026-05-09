@@ -917,7 +917,7 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 		const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
 		md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
 		md.appendMarkdown(`Relief Pilot · **rp_read_file**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`);
-		md.appendMarkdown(`• Path: ${pathPresentation}  \n`);
+		md.appendMarkdown(`${pathPresentation}  \n`);
 		if (offset !== undefined || limit !== undefined) {
 			if (offset !== undefined) {
 				md.appendMarkdown(`• Offset: \`${offset}\`  \n`);
