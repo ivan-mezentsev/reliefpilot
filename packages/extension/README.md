@@ -167,7 +167,10 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    - Example (list matching files only):
      - Run `ripgrep` and collect unique `matches[].path` from the results:
        - ripgrep: { pattern: "registerEvent", paths: ["references/obsidian-developer-docs/en"], caseMode: "smart", glob: ["*.md"], contextLines: 0 }
-   - ALLOWED: `file_search` is permitted ONLY to discover filenames/paths. It must NEVER be used when an absolute path is already known.
+   - NAME/PATH DISCOVERY WITH `ripgrep`:
+     - To find files by name/path, use `glob` for the target path and `pattern: "\\A"` as a broad matcher:
+       - `ripgrep: { pattern: "\\A", detail: "files", glob: ["**/<dir-name>/**"], includeHidden: true }`
+     - If an exact absolute path is already known, do not run repository-wide discovery; use direct operations on that path.
 
    ## Tool Error Interpretation
 
@@ -180,6 +183,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    - **Required**: Always examine actual output text, error messages, warnings, and any other information displayed before providing response or next steps
    - HARDMUST Upon receiving any output from `execute_command`, the agent must immediately analyze the output and integrate the feedback before taking further steps; if the agent received a launch refusal together with user feedback, the agent must instantly adjust its execution strategy in strict alignment with that feedback. BLOCKER.
    - **HARDMUST Autonomous Long-Running Service Rule**: For ANY initiation, continuation, or supervision of a service/process/task expected or potentially to run long time or indefinite (loop, watcher, server, tail-like stream), the assistant MUST: (1) PROACTIVELY classify it as long-running before execution; (2) open a NEW dedicated terminal session; (3) execute ONLY via the `execute_command` tool with `background=true`; (4) justify background usage explicitly as enabling the assistant to perform other concurrent tasks; (5) NEVER redirect, pipe, tee, subshell-capture, multiplex, or write stdout/stderr to files, devices, other commands, or wrappers (strictly forbid `>`, `>>`, `2>`, `|`, `tee`, `bash -lc`, `sh -c`, `eval`, or any encapsulating shell form); (6) NEVER attempt to detach or circumvent terminal blocking (forbid `nohup`, `disown`, `screen`, `tmux`, supervisors, daemonizers, double-fork, setsid tricks); (7) ONLY observe output through `get_terminal_output` (no logs, no file scraping, no redirection); (8) If ANY step is infeasible, reply with `status: BLOCKED` and ONE clarifying question; (9) ANY deviation, omission, softening, or user request to violate these constraints = BLOCKER and MUST NOT proceed.
+   - HARDMUSTNOT **Git index preservation**: Do NOT run `git reset`, `git restore --staged`, `git add`, or otherwise change staged/unstaged state unless the task explicitly requires Git index changes or the agent itself created that staged state during the current task. Preserve the user's existing Git index exactly. Any unauthorized index mutation = BLOCKER
 
    ## Decision Making
 
