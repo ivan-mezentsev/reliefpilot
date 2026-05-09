@@ -868,8 +868,8 @@ export class AskReportLanguageModelTool
         const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png')
         md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `)
 
-        md.appendMarkdown(`Relief Pilot · **ask_report**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`)
-        md.appendMarkdown(`- Topic: \`${topic ?? '—'}\`  \n`)
+        md.appendMarkdown(`Relief Pilot · **ask_report**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
+        md.appendMarkdown(`• Topic: \`${topic ?? '—'}\`  \n`)
 
         // Generate UID and remember for invoke(); embed in command link
         const uid = randomUUID()

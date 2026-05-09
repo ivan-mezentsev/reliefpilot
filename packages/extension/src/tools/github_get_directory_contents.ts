@@ -220,10 +220,10 @@ export class GithubGetDirectoryContentsTool implements LanguageModelTool<GithubG
 
         const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png')
         md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `)
-        md.appendMarkdown(`Relief Pilot · **github_get_directory_contents**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`)
-        md.appendMarkdown(`- Repo: \`${owner}/${repo}\`  \n`)
-        md.appendMarkdown(`- Path: \`${p}\`  \n`)
-        if (ref) md.appendMarkdown(`- Ref: \`${ref}\`  \n`)
+        md.appendMarkdown(`Relief Pilot · **github_get_directory_contents**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
+        md.appendMarkdown(`• Repo: \`${owner}/${repo}\`  \n`)
+        md.appendMarkdown(`• Path: \`${p}\`  \n`)
+        if (ref) md.appendMarkdown(`• Ref: \`${ref}\`  \n`)
 
         const uid = randomUUID()
         this._pendingUids.push(uid)

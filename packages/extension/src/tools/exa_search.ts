@@ -428,28 +428,28 @@ export class ExaSearchTool implements LanguageModelTool<ExaSearchInput> {
 
         const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png')
         md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `)
-        md.appendMarkdown(`Relief Pilot · **exa_search**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`)
-        md.appendMarkdown(`- Query: \`${query}\`  \n`)
+        md.appendMarkdown(`Relief Pilot · **exa_search**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
+        md.appendMarkdown(`• Query: \`${query}\`  \n`)
         if (typeof maxResults === 'number') {
-            md.appendMarkdown(`- Max results: \`${maxResults}\`  \n`)
+            md.appendMarkdown(`• Max results: \`${maxResults}\`  \n`)
         }
         if (domain) {
-            md.appendMarkdown(`- Domain: \`${domain}\`  \n`)
+            md.appendMarkdown(`• Domain: \`${domain}\`  \n`)
         }
         if (userLocation) {
-            md.appendMarkdown(`- User location: \`${userLocation}\`  \n`)
+            md.appendMarkdown(`• User location: \`${userLocation}\`  \n`)
         }
         if (includeText) {
-            md.appendMarkdown(`- Include text: \`${includeText}\`  \n`)
+            md.appendMarkdown(`• Include text: \`${includeText}\`  \n`)
         }
         if (excludeText) {
-            md.appendMarkdown(`- Exclude text: \`${excludeText}\`  \n`)
+            md.appendMarkdown(`• Exclude text: \`${excludeText}\`  \n`)
         }
         if (publishedFrom || publishedTo) {
-            md.appendMarkdown(`- Published date range: from \`${publishedFrom ?? '-'}\` to \`${publishedTo ?? '-'}\`  \n`)
+            md.appendMarkdown(`• Published date range: from \`${publishedFrom ?? '-'}\` to \`${publishedTo ?? '-'}\`  \n`)
         }
         if (crawlFrom || crawlTo) {
-            md.appendMarkdown(`- Crawl date range: from \`${crawlFrom ?? '-'}\` to \`${crawlTo ?? '-'}\`  \n`)
+            md.appendMarkdown(`• Crawl date range: from \`${crawlFrom ?? '-'}\` to \`${crawlTo ?? '-'}\`  \n`)
         }
 
         const uid = randomUUID()

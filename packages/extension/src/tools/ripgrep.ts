@@ -643,14 +643,14 @@ export class RipgrepLanguageModelTool implements LanguageModelTool<RipgrepInput>
 
     const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
     md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
-    md.appendMarkdown(`Relief Pilot · **ripgrep**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`);
-    md.appendMarkdown(`- Pattern: \`${pattern}\`  \n`);
-    md.appendMarkdown(`- CWD: \`${cwd}\`  \n`);
+    md.appendMarkdown(`Relief Pilot · **ripgrep**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`);
+    md.appendMarkdown(`• Pattern: \`${pattern}\`  \n`);
+    md.appendMarkdown(`• CWD: \`${cwd}\`  \n`);
     if (paths.length > 0) {
-      md.appendMarkdown(`- Paths: \`${paths.join(', ')}\`  \n`);
+      md.appendMarkdown(`• Paths: \`${paths.join(', ')}\`  \n`);
     }
-    md.appendMarkdown(`- Detail: \`${detail}\`${glob.length > 0 ? ` · glob: \`${glob.join(', ')}\`` : ''}  \n`);
-    md.appendMarkdown(`- Limits: matches=${maxMatches}, files=${maxFiles}, outputChars=${maxOutputChars}, timeoutMs=${timeoutMs}  \n`);
+    md.appendMarkdown(`• Detail: \`${detail}\`${glob.length > 0 ? ` · glob: \`${glob.join(', ')}\`` : ''}  \n`);
+    md.appendMarkdown(`• Limits: matches=${maxMatches}, files=${maxFiles}, outputChars=${maxOutputChars}, timeoutMs=${timeoutMs}  \n`);
 
     return { invocationMessage: md };
   }

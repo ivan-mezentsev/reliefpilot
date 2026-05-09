@@ -343,7 +343,7 @@ export class ExecuteCommandLanguageModelTool implements LanguageModelTool<Execut
 
     const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png')
     md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `)
-    md.appendMarkdown(`Relief Pilot · **execute_command**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`)
+    md.appendMarkdown(`Relief Pilot · **execute_command**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
 
     if (command) {
       md.appendMarkdown(`\n\n`)
@@ -351,11 +351,11 @@ export class ExecuteCommandLanguageModelTool implements LanguageModelTool<Execut
     }
 
     // Keep remaining fields compact; these are single-line values.
-    if (customCwd) md.appendMarkdown(`- CWD: ${inlineCode(customCwd)}  \n`)
-    if (typeof newTerminal === "boolean") md.appendMarkdown(`- New terminal: ${inlineCode(String(newTerminal))}  \n`)
-    if (typeof destructiveFlag === "boolean") md.appendMarkdown(`- Destructive: ${inlineCode(String(destructiveFlag))}  \n`)
-    if (typeof background === "boolean") md.appendMarkdown(`- Background: ${inlineCode(String(background))}  \n`)
-    if (typeof timeout === "number") md.appendMarkdown(`- Timeout: ${inlineCode(`${timeout}ms`)}  \n`)
+    if (customCwd) md.appendMarkdown(`• CWD: ${inlineCode(customCwd)}  \n`)
+    if (typeof newTerminal === "boolean") md.appendMarkdown(`• New terminal: ${inlineCode(String(newTerminal))}  \n`)
+    if (typeof destructiveFlag === "boolean") md.appendMarkdown(`• Destructive: ${inlineCode(String(destructiveFlag))}  \n`)
+    if (typeof background === "boolean") md.appendMarkdown(`• Background: ${inlineCode(String(background))}  \n`)
+    if (typeof timeout === "number") md.appendMarkdown(`• Timeout: ${inlineCode(`${timeout}ms`)}  \n`)
 
     return { invocationMessage: md }
   }

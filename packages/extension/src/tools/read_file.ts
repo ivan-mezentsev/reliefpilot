@@ -916,25 +916,25 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 		md.isTrusted = true;
 		const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
 		md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
-		md.appendMarkdown(`Relief Pilot · **rp_read_file**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`);
-		md.appendMarkdown(`- Path: ${pathPresentation}  \n`);
+		md.appendMarkdown(`Relief Pilot · **rp_read_file**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`);
+		md.appendMarkdown(`• Path: ${pathPresentation}  \n`);
 		if (offset !== undefined || limit !== undefined) {
 			if (offset !== undefined) {
-				md.appendMarkdown(`- Offset: \`${offset}\`  \n`);
+				md.appendMarkdown(`• Offset: \`${offset}\`  \n`);
 			}
 			if (limit !== undefined) {
-				md.appendMarkdown(`- Limit: \`${limit}\`  \n`);
+				md.appendMarkdown(`• Limit: \`${limit}\`  \n`);
 			}
 		} else if (advancedOptions) {
-			md.appendMarkdown(`- Ranges: \`${advancedOptions.ranges.map(formatLineRange).join('; ')}\`  \n`);
+			md.appendMarkdown(`• Ranges: \`${advancedOptions.ranges.map(formatLineRange).join('; ')}\`  \n`);
 			if (advancedOptions.includeLineNumbers) {
-				md.appendMarkdown(`- Include line numbers: \`true\`  \n`);
+				md.appendMarkdown(`• Include line numbers: \`true\`  \n`);
 				if (advancedOptions.numberBlankLines) {
-					md.appendMarkdown(`- Number blank lines: \`true\`  \n`);
+					md.appendMarkdown(`• Number blank lines: \`true\`  \n`);
 				}
 			}
 			if (advancedOptions.includeRangeHeaders) {
-				md.appendMarkdown(`- Include range headers: \`true\`  \n`);
+				md.appendMarkdown(`• Include range headers: \`true\`  \n`);
 			}
 		}
 

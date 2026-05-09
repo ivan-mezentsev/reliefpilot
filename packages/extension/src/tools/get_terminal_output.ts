@@ -221,9 +221,9 @@ export class GetTerminalOutputLanguageModelTool implements LanguageModelTool<Get
 
     const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png')
     md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `)
-    md.appendMarkdown(`Relief Pilot · **get_terminal_output**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`)
-    if (terminalId) md.appendMarkdown(`- Terminal: \`${terminalId}\`  \n`)
-    if (typeof maxLines === "number") md.appendMarkdown(`- Max lines: \`${maxLines}\`  \n`)
+    md.appendMarkdown(`Relief Pilot · **get_terminal_output**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
+    if (terminalId) md.appendMarkdown(`• Terminal: \`${terminalId}\`  \n`)
+    if (typeof maxLines === "number") md.appendMarkdown(`• Max lines: \`${maxLines}\`  \n`)
 
     return { invocationMessage: md }
   }
