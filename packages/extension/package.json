@@ -384,6 +384,26 @@
         }
       },
       {
+        "name": "rp_list_directory",
+        "displayName": "RP List directory",
+        "modelDescription": "List the contents of a directory. Result will have the name of the child. If the name ends in /, it's a folder, otherwise a file.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "rp_list_directory",
+        "icon": "icon.png",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "The absolute path to the directory to list."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
         "name": "focus_editor",
         "displayName": "Focus editor",
         "modelDescription": "Open the specified file in the VSCode editor and navigate to a specific line and column.\nUse this tool to bring a file into focus and position the editor's cursor where desired.\nNote: This tool operates on the editor visual environment so that the user can see the file. It does not return the file contents in the tool call result.",
