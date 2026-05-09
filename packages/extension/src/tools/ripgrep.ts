@@ -630,6 +630,9 @@ export class RipgrepLanguageModelTool implements LanguageModelTool<RipgrepInput>
     const maxOutputChars = typeof input.maxOutputChars === 'number' ? input.maxOutputChars : DEFAULT_LIMITS.maxOutputChars;
     const timeoutMs = typeof input.timeoutMs === 'number' ? input.timeoutMs : DEFAULT_LIMITS.timeoutMs;
     const detail = typeof input.detail === 'string' ? input.detail : 'lines';
+    const glob = Array.isArray(input.glob)
+      ? input.glob.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : [];
 
     const md = new vscode.MarkdownString(undefined, true);
     md.supportHtml = true;
@@ -646,7 +649,7 @@ export class RipgrepLanguageModelTool implements LanguageModelTool<RipgrepInput>
     if (paths.length > 0) {
       md.appendMarkdown(`- Paths: \`${paths.join(', ')}\`  \n`);
     }
-    md.appendMarkdown(`- Detail: \`${detail}\`  \n`);
+    md.appendMarkdown(`- Detail: \`${detail}\`${glob.length > 0 ? ` · glob: \`${glob.join(', ')}\`` : ''}  \n`);
     md.appendMarkdown(`- Limits: matches=${maxMatches}, files=${maxFiles}, outputChars=${maxOutputChars}, timeoutMs=${timeoutMs}  \n`);
 
     return { invocationMessage: md };
