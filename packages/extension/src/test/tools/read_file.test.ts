@@ -115,6 +115,34 @@ suite('Read File Tool Test Suite', function () {
 		assert.strictEqual(response.text, 'line 2\n\nline 4\nline 5');
 	});
 
+	test('ignores empty default ranges when using offset and limit', async function () {
+		const response = await tool.execute({
+			filePath: textFilePath,
+			offset: 2,
+			limit: 2,
+			ranges: [],
+			includeLineNumbers: false,
+			numberBlankLines: false,
+			includeRangeHeaders: false,
+		});
+
+		assert.strictEqual(response.text, 'line 2\n');
+		assert.strictEqual(response.ranges, undefined);
+	});
+
+	test('ignores empty default ranges when reading a whole file', async function () {
+		const response = await tool.execute({
+			filePath: textFilePath,
+			ranges: [],
+			includeLineNumbers: false,
+			numberBlankLines: false,
+			includeRangeHeaders: false,
+		});
+
+		assert.strictEqual(response.text, 'line 1\nline 2\n\nline 4\nline 5');
+		assert.strictEqual(response.ranges, undefined);
+	});
+
 	test('reads a text file from the last line via negative offset', async function () {
 		const response = await tool.execute({ filePath: textFilePath, offset: -1 });
 
@@ -256,6 +284,26 @@ suite('Read File Tool Test Suite', function () {
 		assert.match(invocationValue, /- Path: \[[^\]]+\]\(file:/);
 		assert.match(invocationValue, /vscodeLinkType%3Dskill/);
 		assert.doesNotMatch(invocationValue, /Range/);
+	});
+
+	test('prepareInvocation ignores empty default ranges with offset and limit', async function () {
+		const prepared = lmTool.prepareInvocation({
+			input: {
+				filePath: textFilePath,
+				offset: 2,
+				limit: 2,
+				ranges: [],
+				includeLineNumbers: false,
+				numberBlankLines: false,
+				includeRangeHeaders: false,
+			},
+		} as any);
+		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+
+		assert.ok(!prepared.confirmationMessages);
+		assert.match(invocationValue, /- Offset: `2`/);
+		assert.match(invocationValue, /- Limit: `2`/);
+		assert.doesNotMatch(invocationValue, /Ranges/);
 	});
 
 	test('prepareInvocation does not request confirmation for Copilot chat session resource files', async function () {

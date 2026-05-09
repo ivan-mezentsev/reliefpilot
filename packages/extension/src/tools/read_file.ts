@@ -272,12 +272,16 @@ function hasLegacyRangeRequest(input: ReadFileInput): boolean {
 	return input.offset !== undefined || input.limit !== undefined;
 }
 
+function hasRangesRequest(input: ReadFileInput): boolean {
+	return input.ranges !== undefined && (!Array.isArray(input.ranges) || input.ranges.length > 0);
+}
+
 function validateReadMode(input: ReadFileInput | undefined): void {
 	if (!input) {
 		return;
 	}
 
-	if (input.ranges !== undefined && hasLegacyRangeRequest(input)) {
+	if (hasRangesRequest(input) && hasLegacyRangeRequest(input)) {
 		throw new Error('Use either offset/limit or ranges, not both.');
 	}
 }
@@ -291,6 +295,10 @@ function getAdvancedReadOptions(
 	}
 
 	if (uri && isCopilotSessionResourceUri(uri)) {
+		return undefined;
+	}
+
+	if (!hasRangesRequest(input)) {
 		return undefined;
 	}
 
