@@ -1,2 +1,9 @@
 packages:
-  - 'packages/*'
+  - "packages/*"
+useNodeVersion: 26.0.0
+onlyBuiltDependencies:
+  - "@vscode/vsce-sign"
+  - esbuild
+  - sharp
+ignoredBuiltDependencies:
+  - keytar

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.0 - 2026-05-09
+
+- docs(readme): update ripgrep usage instructions for name/path discovery
+- feat(execute_command): enhance invocation message handling in tests
+- style: improve markdown formatting in invocation messages
+- feat(ripgrep): enhance CWD handling in invocation messages
+- style: update markdown formatting for invocation messages
+- feat(ripgrep): add glob handling in prepareInvocation method
+- feat(read_file): enhance range handling in ReadFileTool
+- feat(read_file): enhance invocation handling for file paths
+- feat(extension): add List Directory tool and enhance invocation handling
+- feat(extension): add List Directory tool for directory content listing
+- docs(extension): update web search recommendations in README
+- chore(extension): update jsdom dependency and refactor asset copying
+- feat(read_file): enhance file reading with improved offset handling
+- chore(pnpm): update workspace configuration
+- feat(read_file): enhance file reading with negative offset support
+
 ## 1.3.1 - 2026-05-04
 
 - feat(pr_read_file): enhance file reading capabilities with range support

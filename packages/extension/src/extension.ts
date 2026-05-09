@@ -26,6 +26,7 @@ import { GithubSearchRepositoriesTool } from './tools/github_search_repositories
 import { GoogleSearchTool } from './tools/google_search';
 import { openOrFocusHaltForFeedback } from './tools/halt_for_feedback';
 import { LinkupSearchTool } from './tools/linkup_search';
+import { ListDirectoryLanguageModelTool } from './tools/list_directory';
 import { ReadFileLanguageModelTool } from './tools/read_file';
 import { RipgrepLanguageModelTool } from './tools/ripgrep';
 import { openAiFetchProgressPanelByUid } from './utils/ai_fetch_progress';
@@ -124,6 +125,14 @@ async function ensureLanguageModelToolsRegistered(context: vscode.ExtensionConte
 	} catch (err) {
       outputChannel.appendLine(`Failed to register language model tool rp_read_file: ${err instanceof Error ? err.message : String(err)}`);
 	}
+
+  try {
+    const disposable = vscode.lm.registerTool('rp_list_directory', new ListDirectoryLanguageModelTool());
+    context.subscriptions.push(disposable);
+    outputChannel.appendLine('Registered language model tool: rp_list_directory.');
+  } catch (err) {
+    outputChannel.appendLine(`Failed to register language model tool rp_list_directory: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
     try {
       const disposable = vscode.lm.registerTool('focus_editor', new FocusEditorLanguageModelTool());

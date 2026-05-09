@@ -325,16 +325,16 @@ export class LinkupSearchTool implements LanguageModelTool<LinkupSearchInput> {
 
         const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png')
         md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `)
-        md.appendMarkdown(`Relief Pilot · **linkup_search**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`)
-        md.appendMarkdown(`- Query: \`${query}\`  \n`)
+        md.appendMarkdown(`Relief Pilot · **linkup_search**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
+        md.appendMarkdown(`• Query: \`${query}\`  \n`)
         if (Array.isArray(domains) && domains.length > 0) {
-            md.appendMarkdown(`- Only search these domains: ${domains.map((d) => `\`${d}\``).join(', ')}  \n`)
+            md.appendMarkdown(`• Only search these domains: ${domains.map((d) => `\`${d}\``).join(', ')}  \n`)
         }
         if (fromDate || toDate) {
-            md.appendMarkdown(`- Date filter: from \`${fromDate ?? '-'}\` to \`${toDate ?? '-'}\`  \n`)
+            md.appendMarkdown(`• Date filter: from \`${fromDate ?? '-'}\` to \`${toDate ?? '-'}\`  \n`)
         }
         if (typeof maxResults === 'number') {
-            md.appendMarkdown(`- Max results: \`${maxResults}\`  \n`)
+            md.appendMarkdown(`• Max results: \`${maxResults}\`  \n`)
         }
 
         const uid = randomUUID()

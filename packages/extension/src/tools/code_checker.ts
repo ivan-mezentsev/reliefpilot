@@ -168,8 +168,8 @@ export class CodeCheckerLanguageModelTool
             .get<boolean>('showPauseButtonInChat', true);
         const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
         md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
-        md.appendMarkdown(`Relief Pilot · **code_checker**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`);
-        md.appendMarkdown(`- Severity: \`${label}\`  \n`);
+        md.appendMarkdown(`Relief Pilot · **code_checker**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`);
+        md.appendMarkdown(`• Severity: \`${label}\`  \n`);
         return { invocationMessage: md };
     }
 }

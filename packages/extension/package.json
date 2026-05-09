@@ -3,7 +3,7 @@
   "displayName": "Relief Pilot",
   "description": "A Swiss Army knife for AI agents in VS Code: safer tool calling, human-in-the-loop approvals, and smarter doc fetching to boost productivity and save you money.",
   "publisher": "ivan-mezentsev",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "type": "commonjs",
   "icon": "icon.png",
   "categories": [
@@ -62,7 +62,7 @@
     "NOTICE"
   ],
   "engines": {
-    "vscode": ">=1.100.0"
+    "vscode": ">=1.110.0"
   },
   "repository": {
     "type": "git",
@@ -326,7 +326,7 @@
       {
         "name": "rp_read_file",
         "displayName": "RP Read file",
-        "modelDescription": "Read the contents of a file. Line numbers are 1-indexed. This tool truncates output at 2000 lines and can be called repeatedly with optional offset and limit parameters to read larger files in chunks. Binary files use offset and limit as byte offsets. When both offset and limit are omitted for a normal file, you can instead pass ranges to read multiple inclusive line ranges in one call, optionally include line numbers, number blank lines, and add range headers.",
+        "modelDescription": "Read the contents of a file. Line numbers are 1-indexed. This tool truncates output at 2000 lines. Use exactly one mode: offset/limit or ranges; using both is invalid. In offset/limit mode, use a positive offset to start at a specific line, or use offset=-1 for tail mode where limit controls how many final lines to read. Other negative offsets and offset=0 are invalid. Binary files use offset and limit as byte ranges; offset=-1 reads the last limit bytes. In ranges mode, read multiple inclusive line ranges in one call, optionally include line numbers, number blank lines, and add range headers.",
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "rp_read_file",
         "icon": "icon.png",
@@ -339,47 +339,67 @@
             },
             "offset": {
               "type": "number",
-              "description": "Optional: the 1-based line number to start reading from. Only use this if the file is too large to read at once. If not specified, the file will be read from the beginning."
+              "description": "Optional: a positive 1-based line number to start reading from, or -1 for tail mode. In tail mode, limit controls how many final lines are returned; if limit is omitted, only the final line is returned. Binary files use byte offsets; offset=-1 reads the last limit bytes. Offset 0 and negative offsets other than -1 are invalid. Do not use with ranges. If not specified, the file will be read from the beginning."
             },
             "limit": {
               "type": "number",
-              "description": "Optional: the maximum number of lines to read. Only use this together with offset if the file is too large to read at once."
-      },
-      "ranges": {
-        "type": "array",
-        "description": "Optional: multiple inclusive line ranges to read in one call. This block is only used when both offset and limit are omitted, and is ignored for Copilot chat session resource files.",
-        "items": {
-          "type": "object",
-          "properties": {
-            "startLine": {
-              "type": "number",
-              "description": "The inclusive 1-based start line for this range."
+              "description": "Optional: the maximum number of lines to read in offset/limit mode. With offset=-1, this is the number of final lines to return. Binary files use this as a byte count. Do not use with ranges."
             },
-            "endLine": {
-              "type": "number",
-              "description": "Optional inclusive 1-based end line for this range. If omitted, only startLine is read."
-            }
-          },
-          "required": [
-            "startLine"
-          ]
-        }
-      },
-      "includeLineNumbers": {
-        "type": "boolean",
-        "description": "Optional: when using ranges mode, include source line numbers in the result. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
-      },
-      "numberBlankLines": {
-        "type": "boolean",
-        "description": "Optional: when using ranges mode with includeLineNumbers, also include line numbers for blank lines. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
-      },
-      "includeRangeHeaders": {
-        "type": "boolean",
-        "description": "Optional: when using ranges mode, add text headers like '--- lines 10-20 ---' before each range block. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
+            "ranges": {
+              "type": "array",
+              "description": "Optional: multiple inclusive line ranges to read in one call. Use ranges mode only when both offset and limit are omitted; using ranges with offset or limit is invalid. This block is ignored for Copilot chat session resource files.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "startLine": {
+                    "type": "number",
+                    "description": "The inclusive 1-based start line for this range."
+                  },
+                  "endLine": {
+                    "type": "number",
+                    "description": "Optional inclusive 1-based end line for this range. If omitted, only startLine is read."
+                  }
+                },
+                "required": [
+                  "startLine"
+                ]
+              }
+            },
+            "includeLineNumbers": {
+              "type": "boolean",
+              "description": "Optional: when using ranges mode, include source line numbers in the result. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
+            },
+            "numberBlankLines": {
+              "type": "boolean",
+              "description": "Optional: when using ranges mode with includeLineNumbers, also include line numbers for blank lines. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
+            },
+            "includeRangeHeaders": {
+              "type": "boolean",
+              "description": "Optional: when using ranges mode, add text headers like '--- lines 10-20 ---' before each range block. Ignored when offset or limit is provided, and ignored for Copilot chat session resource files."
             }
           },
           "required": [
             "filePath"
+          ]
+        }
+      },
+      {
+        "name": "rp_list_directory",
+        "displayName": "RP List directory",
+        "modelDescription": "List the contents of a directory. Result will have the name of the child. If the name ends in /, it's a folder, otherwise a file.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "rp_list_directory",
+        "icon": "icon.png",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "The absolute path to the directory to list."
+            }
+          },
+          "required": [
+            "path"
           ]
         }
       },
@@ -1283,9 +1303,8 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "vscode:prepublish": "pnpm package",
     "prepackage-extension": "pnpm run generate:icon",
-    "package-extension": "cross-env npm_config_user_agent=pnpm vsce package --no-dependencies",
+    "package-extension": "pnpm package && vsce package --no-dependencies",
     "generate:icon": "node scripts/generate_icon.js",
     "compile": "pnpm check-types && node build.js",
     "check-types": "tsc --noEmit",
@@ -1298,30 +1317,30 @@
     "package": "pnpm check-types && node build.js --production"
   },
   "devDependencies": {
-    "@types/jsdom": "^27.0.0",
+    "@types/jsdom": "^28.0.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^22.19.0",
-    "@types/vscode": "^1.100.0",
+    "@types/node": "^25.6.2",
+    "@types/vscode": "1.110.0",
     "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.4.1",
-    "@vscode/vsce": "^3.6.2",
-    "cross-env": "^10.1.0",
-    "sharp": "^0.34.4",
-    "typescript": "^5.9.3"
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.1",
+    "sharp": "^0.34.5",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@nanocollective/get-md": "^1.0.1",
-    "@vscode/prompt-tsx": "^0.4.0-alpha.8",
-    "esbuild": "^0.25.12",
-    "highlight.js": "^11.10.0",
-    "isbinaryfile": "^5.0.6",
+    "@nanocollective/get-md": "1.0.1",
+    "@vscode/prompt-tsx": "0.4.0-alpha.8",
+    "esbuild": "^0.28.0",
+    "gpt-tokenizer": "^3.4.0",
+    "highlight.js": "^11.11.1",
+    "isbinaryfile": "^6.0.0",
+    "jsdom": "24.1.3",
     "katex": "0.16.45",
-    "marked": "16.4.1",
-    "mermaid": "^11.11.0",
+    "marked": "18.0.3",
+    "mermaid": "^11.14.0",
     "p-wait-for": "^6.0.0",
-    "zod": "^4.1.12",
-    "parse5": "^8.0.0",
-    "gpt-tokenizer": "^3.4.0"
+    "parse5": "^8.0.1",
+    "zod": "^4.4.3"
   },
   "packageManager": "pnpm@10.6.1+sha512.40ee09af407fa9fbb5fbfb8e1cb40fbb74c0af0c3e10e9224d7b53c7658528615b2c92450e74cfad91e3a2dcafe3ce4050d80bda71d757756d2ce2b66213e9a3"
 }

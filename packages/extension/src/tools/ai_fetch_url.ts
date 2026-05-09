@@ -605,12 +605,12 @@ export class AiFetchUrlLanguageModelTool implements LanguageModelTool<AiFetchUrl
         md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
 
         // Nicely formatted invocation info (title + details)
-        md.appendMarkdown(`Relief Pilot · **ai_fetch_url**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`);
-        md.appendMarkdown(`- Model: \`${modelId ?? '—'}\`  \n`);
-        md.appendMarkdown(`- URL: ${url}  \n`);
-        md.appendMarkdown(`- Topic: \`${topic}\`  \n`);
+        md.appendMarkdown(`Relief Pilot · **ai_fetch_url**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`);
+        md.appendMarkdown(`• Model: \`${modelId ?? '—'}\`  \n`);
+        md.appendMarkdown(`• URL: ${url}  \n`);
+        md.appendMarkdown(`• Topic: \`${topic}\`  \n`);
         if (includeLinks) {
-            md.appendMarkdown(`- Include Links: \`true\`  \n`);
+            md.appendMarkdown(`• Include Links: \`true\`  \n`);
         }
         md.appendMarkdown('\n');
 

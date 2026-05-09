@@ -206,20 +206,20 @@ export class FocusEditorLanguageModelTool implements LanguageModelTool<FocusEdit
 
         const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png')
         md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `)
-        md.appendMarkdown(`Relief Pilot · **focus_editor**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`)
-        if (displayPath) md.appendMarkdown(`- File: \`${displayPath}\`  \n`)
+        md.appendMarkdown(`Relief Pilot · **focus_editor**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
+        if (displayPath) md.appendMarkdown(`• File: \`${displayPath}\`  \n`)
         if (hasRange) {
             const sLn = Math.max(1, startLine!)
             const sCol = Math.max(1, startColumn!)
             const eLn = Math.max(1, endLine!)
             const eCol = Math.max(1, endColumn!)
-            md.appendMarkdown(`- Range: \`${sLn}:${sCol}-${eLn}:${eCol}\`  \n`)
+            md.appendMarkdown(`• Range: \`${sLn}:${sCol}-${eLn}:${eCol}\`  \n`)
         } else {
             const rawLn = line ?? startLine ?? 1
             const rawCol = column ?? startColumn ?? 1
             const ln = Math.max(1, rawLn)
             const col = Math.max(1, rawCol)
-            md.appendMarkdown(`- Cursor: \`${ln}:${col}\`  \n`)
+            md.appendMarkdown(`• Cursor: \`${ln}:${col}\`  \n`)
         }
 
         return { invocationMessage: md }

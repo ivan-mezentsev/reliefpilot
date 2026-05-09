@@ -1,17 +1,17 @@
-import * as path from 'node:path';
 import {
-	BasePromptElementProps,
-	PromptElement,
-	type PromptPiece,
-	renderElementJSON,
+    BasePromptElementProps,
+    PromptElement,
+    type PromptPiece,
+    renderElementJSON,
 } from '@vscode/prompt-tsx';
 import { isBinaryFile } from 'isbinaryfile';
+import * as path from 'node:path';
 import type {
-	CancellationToken,
-	LanguageModelTool,
-	LanguageModelToolInvocationOptions,
-	LanguageModelToolInvocationPrepareOptions,
-	PreparedToolInvocation,
+    CancellationToken,
+    LanguageModelTool,
+    LanguageModelToolInvocationOptions,
+    LanguageModelToolInvocationPrepareOptions,
+    PreparedToolInvocation,
 } from 'vscode';
 import * as vscode from 'vscode';
 import { env } from '../utils/env';
@@ -124,6 +124,11 @@ function toDisplayPath(uri: vscode.Uri): string {
 	return uri.scheme === 'file' ? uri.fsPath : uri.toString();
 }
 
+function formatUriForFileWidget(uri: vscode.Uri, linkText: string): string {
+	const uriWithQuery = uri.with({ query: 'vscodeLinkType=skill' });
+	return `[${escapeMarkdownLinkText(linkText)}](${uriWithQuery.toString()})`;
+}
+
 function isCopilotSessionResourceUri(uri: vscode.Uri): boolean {
 	if (uri.scheme !== 'file') {
 		return false;
@@ -195,8 +200,16 @@ function normalizeOffset(value: unknown): number | undefined {
 		return undefined;
 	}
 
-	if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-		throw new Error('offset must be a non-negative integer.');
+	if (typeof value !== 'number' || !Number.isInteger(value)) {
+		throw new Error('offset must be an integer.');
+	}
+
+	if (value === 0) {
+		throw new Error('offset must not be 0. Omit offset to read from the beginning, use a positive offset to read from a 1-indexed line or byte, or use -1 for tail mode.');
+	}
+
+	if (value < -1) {
+		throw new Error('offset must be a positive integer or -1 for tail mode. Other negative offsets are not supported.');
 	}
 
 	return value;
@@ -259,6 +272,20 @@ function hasLegacyRangeRequest(input: ReadFileInput): boolean {
 	return input.offset !== undefined || input.limit !== undefined;
 }
 
+function hasRangesRequest(input: ReadFileInput): boolean {
+	return input.ranges !== undefined && (!Array.isArray(input.ranges) || input.ranges.length > 0);
+}
+
+function validateReadMode(input: ReadFileInput | undefined): void {
+	if (!input) {
+		return;
+	}
+
+	if (hasRangesRequest(input) && hasLegacyRangeRequest(input)) {
+		throw new Error('Use either offset/limit or ranges, not both.');
+	}
+}
+
 function getAdvancedReadOptions(
 	input: ReadFileInput,
 	uri: vscode.Uri | undefined,
@@ -268,6 +295,10 @@ function getAdvancedReadOptions(
 	}
 
 	if (uri && isCopilotSessionResourceUri(uri)) {
+		return undefined;
+	}
+
+	if (!hasRangesRequest(input)) {
 		return undefined;
 	}
 
@@ -287,16 +318,29 @@ function getAdvancedReadOptions(
 function getTextRange(
 	totalLines: number,
 	input: ReadFileInput,
+	documentText: string,
 ): { startLine: number; endLine: number; truncated: boolean } {
 	const offset = normalizeOffset(input.offset);
 	const requestedLimit = normalizeLimit(input.limit);
+	if (offset === -1) {
+		const tailEndLine = documentText.endsWith('\n') && totalLines > 1
+			? totalLines - 1
+			: totalLines;
+		const effectiveLimit = clamp(requestedLimit ?? 1, 1, MAX_LINES_PER_READ);
+		return {
+			startLine: clamp(tailEndLine - effectiveLimit + 1, 1, tailEndLine),
+			endLine: tailEndLine,
+			truncated: false,
+		};
+	}
 
 	if (offset !== undefined && offset > totalLines) {
 		throw new Error(`Invalid offset ${offset}: file only has ${totalLines} line${totalLines === 1 ? '' : 's'}. Line numbers are 1-indexed.`);
 	}
 
 	const effectiveLimit = clamp(requestedLimit ?? Number.POSITIVE_INFINITY, 1, MAX_LINES_PER_READ);
-	const startLine = clamp(offset ?? 1, 1, totalLines);
+	const requestedStartLine = offset ?? 1;
+	const startLine = clamp(requestedStartLine, 1, totalLines);
 	const endLine = clamp(startLine + effectiveLimit - 1, 1, totalLines);
 	return {
 		startLine,
@@ -327,9 +371,22 @@ function getBinaryByteRange(
 ): { startByte: number; endByte: number; truncated: boolean } {
 	const offset = normalizeOffset(input.offset);
 	const limit = normalizeLimit(input.limit);
-	let requestedStartByte = offset ?? 0;
+	if (offset === -1) {
+		const requestedLength = limit ?? 1;
+		const effectiveLength = Math.min(requestedLength, MAX_BINARY_HEXDUMP_BYTES);
+		const startByte = Math.max(totalBytes - effectiveLength, 0);
+		return {
+			startByte,
+			endByte: totalBytes,
+			truncated: requestedLength > effectiveLength && startByte > 0,
+		};
+	}
+
+	let requestedStartByte = offset === undefined
+		? 0
+		: offset;
 	let requestedEndByte = offset !== undefined && limit !== undefined
-		? offset + limit
+		? requestedStartByte + limit
 		: requestedStartByte + 128;
 	if (requestedStartByte > requestedEndByte) {
 		[requestedStartByte, requestedEndByte] = [requestedEndByte, requestedStartByte];
@@ -437,6 +494,30 @@ async function resolveReadFileUri(rawFilePath: string): Promise<vscode.Uri> {
 	}
 
 	return resolveRelativePathInWorkspace(rawFilePath);
+}
+
+function tryResolvePathForInvocation(rawFilePath: string): vscode.Uri | undefined {
+	const directUri = tryParseDirectUri(rawFilePath);
+	if (directUri) {
+		return directUri;
+	}
+
+	const workspaceFolders = vscode.workspace.workspaceFolders;
+	if (!workspaceFolders || workspaceFolders.length !== 1) {
+		return undefined;
+	}
+
+	const [folder] = workspaceFolders;
+	const trimmed = rawFilePath.trim();
+	if (trimmed.length === 0) {
+		return undefined;
+	}
+
+	if (folder.uri.scheme === 'file') {
+		return vscode.Uri.file(path.resolve(folder.uri.fsPath, trimmed));
+	}
+
+	return vscode.Uri.joinPath(folder.uri, ...trimmed.split(/[\\/]+/).filter(Boolean));
 }
 
 function findOpenDocument(uri: vscode.Uri): vscode.TextDocument | undefined {
@@ -718,6 +799,7 @@ export class ReadFileTool {
 			return buildReadFileToolResponse(vscode.Uri.file(input.filePath), 'Operation cancelled.');
 		}
 
+		validateReadMode(input);
 		const uri = await resolveReadFileUri(input.filePath);
 		const fileData = await getReadableFileData(uri);
 
@@ -752,7 +834,7 @@ export class ReadFileTool {
 			);
 		}
 
-		const { startLine, endLine, truncated } = getTextRange(totalLines, input);
+		const { startLine, endLine, truncated } = getTextRange(totalLines, input, documentText);
 
 		let content = getDocumentRangeText(fileData.document, startLine, endLine);
 		if (truncated) {
@@ -810,6 +892,12 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 	): PreparedToolInvocation {
 		const rawFilePath = typeof options.input?.filePath === 'string' ? options.input.filePath.trim() : '<missing-filePath>';
 		const directUri = tryParseDirectUri(rawFilePath);
+		const resolvedUri = tryResolvePathForInvocation(rawFilePath);
+		const displayPath = resolvedUri ? toDisplayPath(resolvedUri) : rawFilePath;
+		const pathPresentation = resolvedUri && isUriInsideWorkspaceFolders(resolvedUri)
+			? formatUriForFileWidget(resolvedUri, displayPath)
+			: `\`${escapeInlineCode(displayPath)}\``;
+		validateReadMode(options.input);
 		const offset = normalizeOffset(options.input?.offset);
 		const limit = normalizeLimit(options.input?.limit);
 		const advancedOptions = getAdvancedReadOptions(options.input, directUri);
@@ -828,28 +916,26 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 		md.isTrusted = true;
 		const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
 		md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
-		md.appendMarkdown(`Relief Pilot · **rp_read_file**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`);
-		md.appendMarkdown(`- Path: \`${escapeInlineCode(rawFilePath)}\`  \n`);
+		md.appendMarkdown(`Relief Pilot · **rp_read_file**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`);
+		md.appendMarkdown(`${pathPresentation}  \n`);
 		if (offset !== undefined || limit !== undefined) {
 			if (offset !== undefined) {
-				md.appendMarkdown(`- Offset: \`${offset}\`  \n`);
+				md.appendMarkdown(`• Offset: \`${offset}\`  \n`);
 			}
 			if (limit !== undefined) {
-				md.appendMarkdown(`- Limit: \`${limit}\`  \n`);
+				md.appendMarkdown(`• Limit: \`${limit}\`  \n`);
 			}
 		} else if (advancedOptions) {
-			md.appendMarkdown(`- Ranges: \`${advancedOptions.ranges.map(formatLineRange).join('; ')}\`  \n`);
+			md.appendMarkdown(`• Ranges: \`${advancedOptions.ranges.map(formatLineRange).join('; ')}\`  \n`);
 			if (advancedOptions.includeLineNumbers) {
-				md.appendMarkdown(`- Include line numbers: \`true\`  \n`);
+				md.appendMarkdown(`• Include line numbers: \`true\`  \n`);
 				if (advancedOptions.numberBlankLines) {
-					md.appendMarkdown(`- Number blank lines: \`true\`  \n`);
+					md.appendMarkdown(`• Number blank lines: \`true\`  \n`);
 				}
 			}
 			if (advancedOptions.includeRangeHeaders) {
-				md.appendMarkdown(`- Include range headers: \`true\`  \n`);
+				md.appendMarkdown(`• Include range headers: \`true\`  \n`);
 			}
-		} else {
-			md.appendMarkdown(`- Range: \`full file\`  \n`);
 		}
 
 		const confirmationMessages = buildOutsideWorkspaceConfirmation(rawFilePath);
