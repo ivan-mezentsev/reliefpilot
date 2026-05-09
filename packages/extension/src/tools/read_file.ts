@@ -124,6 +124,11 @@ function toDisplayPath(uri: vscode.Uri): string {
 	return uri.scheme === 'file' ? uri.fsPath : uri.toString();
 }
 
+function formatUriForFileWidget(uri: vscode.Uri, linkText: string): string {
+	const uriWithQuery = uri.with({ query: 'vscodeLinkType=skill' });
+	return `[${escapeMarkdownLinkText(linkText)}](${uriWithQuery.toString()})`;
+}
+
 function isCopilotSessionResourceUri(uri: vscode.Uri): boolean {
 	if (uri.scheme !== 'file') {
 		return false;
@@ -481,6 +486,30 @@ async function resolveReadFileUri(rawFilePath: string): Promise<vscode.Uri> {
 	}
 
 	return resolveRelativePathInWorkspace(rawFilePath);
+}
+
+function tryResolvePathForInvocation(rawFilePath: string): vscode.Uri | undefined {
+	const directUri = tryParseDirectUri(rawFilePath);
+	if (directUri) {
+		return directUri;
+	}
+
+	const workspaceFolders = vscode.workspace.workspaceFolders;
+	if (!workspaceFolders || workspaceFolders.length !== 1) {
+		return undefined;
+	}
+
+	const [folder] = workspaceFolders;
+	const trimmed = rawFilePath.trim();
+	if (trimmed.length === 0) {
+		return undefined;
+	}
+
+	if (folder.uri.scheme === 'file') {
+		return vscode.Uri.file(path.resolve(folder.uri.fsPath, trimmed));
+	}
+
+	return vscode.Uri.joinPath(folder.uri, ...trimmed.split(/[\\/]+/).filter(Boolean));
 }
 
 function findOpenDocument(uri: vscode.Uri): vscode.TextDocument | undefined {
@@ -855,6 +884,11 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 	): PreparedToolInvocation {
 		const rawFilePath = typeof options.input?.filePath === 'string' ? options.input.filePath.trim() : '<missing-filePath>';
 		const directUri = tryParseDirectUri(rawFilePath);
+		const resolvedUri = tryResolvePathForInvocation(rawFilePath);
+		const displayPath = resolvedUri ? toDisplayPath(resolvedUri) : rawFilePath;
+		const pathPresentation = resolvedUri && isUriInsideWorkspaceFolders(resolvedUri)
+			? formatUriForFileWidget(resolvedUri, displayPath)
+			: `\`${escapeInlineCode(displayPath)}\``;
 		validateReadMode(options.input);
 		const offset = normalizeOffset(options.input?.offset);
 		const limit = normalizeLimit(options.input?.limit);
@@ -875,7 +909,7 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 		const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png');
 		md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `);
 		md.appendMarkdown(`Relief Pilot · **rp_read_file**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}\n`);
-		md.appendMarkdown(`- Path: \`${escapeInlineCode(rawFilePath)}\`  \n`);
+		md.appendMarkdown(`- Path: ${pathPresentation}  \n`);
 		if (offset !== undefined || limit !== undefined) {
 			if (offset !== undefined) {
 				md.appendMarkdown(`- Offset: \`${offset}\`  \n`);
@@ -894,8 +928,6 @@ export class ReadFileLanguageModelTool implements LanguageModelTool<ReadFileInpu
 			if (advancedOptions.includeRangeHeaders) {
 				md.appendMarkdown(`- Include range headers: \`true\`  \n`);
 			}
-		} else {
-			md.appendMarkdown(`- Range: \`full file\`  \n`);
 		}
 
 		const confirmationMessages = buildOutsideWorkspaceConfirmation(rawFilePath);

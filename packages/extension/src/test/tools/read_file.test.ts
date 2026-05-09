@@ -235,11 +235,27 @@ suite('Read File Tool Test Suite', function () {
 
 	test('prepareInvocation requests confirmation for paths outside the workspace', async function () {
 		const prepared = lmTool.prepareInvocation({ input: { filePath: outsideFilePath } } as any);
+		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+			const pathLine = invocationValue.split('\n').find((line) => line.startsWith('- Path: '));
 
 		assert.ok(prepared.confirmationMessages);
 		assert.strictEqual(prepared.confirmationMessages?.title, 'Read File Outside Workspace');
-		assert.match((prepared.invocationMessage as vscode.MarkdownString).value, /rp_read_file/);
-		assert.match((prepared.invocationMessage as vscode.MarkdownString).value, /full file/);
+		assert.match(invocationValue, /rp_read_file/);
+		assert.match(invocationValue, new RegExp(outsideFilePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+		assert.doesNotMatch(invocationValue, /Range/);
+			assert.strictEqual(pathLine, `- Path: \`${outsideFilePath}\`  `);
+	});
+
+	test('prepareInvocation renders a clickable file widget path for workspace files', async function () {
+		const prepared = lmTool.prepareInvocation({ input: { filePath: textFilePath } } as any);
+		const invocationValue = (prepared.invocationMessage as vscode.MarkdownString).value;
+
+		assert.ok(!prepared.confirmationMessages);
+		assert.match(invocationValue, /rp_read_file/);
+		assert.match(invocationValue, new RegExp(textFilePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+		assert.match(invocationValue, /- Path: \[[^\]]+\]\(file:/);
+		assert.match(invocationValue, /vscodeLinkType%3Dskill/);
+		assert.doesNotMatch(invocationValue, /Range/);
 	});
 
 	test('prepareInvocation does not request confirmation for Copilot chat session resource files', async function () {
