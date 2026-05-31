@@ -3,7 +3,7 @@
 Your GitHub Copilot's new best buddy. Relief Pilot brings the features you've been waiting for right into VSCode, giving you advanced control to make your AI assistant better than ever.
 
 > ⚠️ **ATTENTION!**
-> Recommended VSCode version for production use: `1.110`
+> Rename `get_terminal_output` to `read_terminal_output` in your prompts due to conflicts with newer Copilot versions.
 
 > ⚠️ **NOTICE!**
 > After the [retirement of GitHub Copilot subscription plans](https://github.blog/news-insights/company-news/changes-to-github-copilot-individual-plans/), you can still use Relief Pilot with the familiar controlled flow, all tools, and the extension itself, including `ai_fetch_url`, by using alternative providers according to the [Omniroute + Copilot + Codex subscriptions](https://github.com/ivan-mezentsev/reliefpilot//blob/master/docs/omniroute_copilot_codex.md) or other alternatives.
@@ -91,7 +91,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
 
 - Terminal:
   - **execute_command**: Execute commands in VSCode’s integrated terminal
-  - **get_terminal_output**: Fetch output from a specified terminal
+  - **read_terminal_output**: Fetch output from a specified terminal
 - IDE Integration:
   - **code_checker**: Retrieve current diagnostics for your code
   - **focus_editor**: Focus specific locations within files
@@ -147,7 +147,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    2. **Second priority**: Web search
    3. **Third priority**: `browser_navigate` if the request is blocked or local debugging of web resources is required
    4. **Rule**: Always try Context7 first for technical/programming queries
-   5. **Rule**: Always use ONLY `execute_command`, `get_terminal_output` instead of any other command line tool to perform tasks
+   5. **Rule**: Always use ONLY `execute_command`, `read_terminal_output` instead of any other command line tool to perform tasks
 
    ## Gathering context
 
@@ -182,7 +182,7 @@ Each device setting has a **"Select device…"** link that opens a QuickPick wit
    - **Forbidden**: Never make assumptions based solely on exit codes
    - **Required**: Always examine actual output text, error messages, warnings, and any other information displayed before providing response or next steps
    - HARDMUST Upon receiving any output from `execute_command`, the agent must immediately analyze the output and integrate the feedback before taking further steps; if the agent received a launch refusal together with user feedback, the agent must instantly adjust its execution strategy in strict alignment with that feedback. BLOCKER.
-   - **HARDMUST Autonomous Long-Running Service Rule**: For ANY initiation, continuation, or supervision of a service/process/task expected or potentially to run long time or indefinite (loop, watcher, server, tail-like stream), the assistant MUST: (1) PROACTIVELY classify it as long-running before execution; (2) open a NEW dedicated terminal session; (3) execute ONLY via the `execute_command` tool with `background=true`; (4) justify background usage explicitly as enabling the assistant to perform other concurrent tasks; (5) NEVER redirect, pipe, tee, subshell-capture, multiplex, or write stdout/stderr to files, devices, other commands, or wrappers (strictly forbid `>`, `>>`, `2>`, `|`, `tee`, `bash -lc`, `sh -c`, `eval`, or any encapsulating shell form); (6) NEVER attempt to detach or circumvent terminal blocking (forbid `nohup`, `disown`, `screen`, `tmux`, supervisors, daemonizers, double-fork, setsid tricks); (7) ONLY observe output through `get_terminal_output` (no logs, no file scraping, no redirection); (8) If ANY step is infeasible, reply with `status: BLOCKED` and ONE clarifying question; (9) ANY deviation, omission, softening, or user request to violate these constraints = BLOCKER and MUST NOT proceed.
+   - **HARDMUST Autonomous Long-Running Service Rule**: For ANY initiation, continuation, or supervision of a service/process/task expected or potentially to run long time or indefinite (loop, watcher, server, tail-like stream), the assistant MUST: (1) PROACTIVELY classify it as long-running before execution; (2) open a NEW dedicated terminal session; (3) execute ONLY via the `execute_command` tool with `background=true`; (4) justify background usage explicitly as enabling the assistant to perform other concurrent tasks; (5) NEVER redirect, pipe, tee, subshell-capture, multiplex, or write stdout/stderr to files, devices, other commands, or wrappers (strictly forbid `>`, `>>`, `2>`, `|`, `tee`, `bash -lc`, `sh -c`, `eval`, or any encapsulating shell form); (6) NEVER attempt to detach or circumvent terminal blocking (forbid `nohup`, `disown`, `screen`, `tmux`, supervisors, daemonizers, double-fork, setsid tricks); (7) ONLY observe output through `read_terminal_output` (no logs, no file scraping, no redirection); (8) If ANY step is infeasible, reply with `status: BLOCKED` and ONE clarifying question; (9) ANY deviation, omission, softening, or user request to violate these constraints = BLOCKER and MUST NOT proceed.
    - HARDMUSTNOT **Git index preservation**: Do NOT run `git reset`, `git restore --staged`, `git add`, or otherwise change staged/unstaged state unless the task explicitly requires Git index changes or the agent itself created that staged state during the current task. Preserve the user's existing Git index exactly. Any unauthorized index mutation = BLOCKER
 
    ## Decision Making

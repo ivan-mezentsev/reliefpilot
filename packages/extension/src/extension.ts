@@ -11,7 +11,6 @@ import { ExaSearchTool } from './tools/exa_search';
 import { ExecuteCommandLanguageModelTool } from './tools/execute_command';
 import { FeloSearchTool } from './tools/felo_search';
 import { FocusEditorLanguageModelTool } from './tools/focus_editor';
-import { GetTerminalOutputLanguageModelTool } from './tools/get_terminal_output';
 import { GithubGetDirectoryContentsTool } from './tools/github_get_directory_contents';
 import { GithubGetFileContentsTool } from './tools/github_get_file_contents';
 import { GithubGetLatestReleaseTool } from './tools/github_get_latest_release';
@@ -28,6 +27,7 @@ import { openOrFocusHaltForFeedback } from './tools/halt_for_feedback';
 import { LinkupSearchTool } from './tools/linkup_search';
 import { ListDirectoryLanguageModelTool } from './tools/list_directory';
 import { ReadFileLanguageModelTool } from './tools/read_file';
+import { GetTerminalOutputLanguageModelTool } from './tools/read_terminal_output';
 import { RipgrepLanguageModelTool } from './tools/ripgrep';
 import { openAiFetchProgressPanelByUid } from './utils/ai_fetch_progress';
 import { initAiFetchSessionStorage, registerAiFetchSessionConfigWatcher } from './utils/ai_fetch_sessions';
@@ -159,11 +159,11 @@ async function ensureLanguageModelToolsRegistered(context: vscode.ExtensionConte
     }
 
     try {
-      const disposable = vscode.lm.registerTool('get_terminal_output', new GetTerminalOutputLanguageModelTool());
+      const disposable = vscode.lm.registerTool('read_terminal_output', new GetTerminalOutputLanguageModelTool());
       context.subscriptions.push(disposable);
-      outputChannel.appendLine('Registered language model tool: get_terminal_output.');
+      outputChannel.appendLine('Registered language model tool: read_terminal_output.');
     } catch (err) {
-      outputChannel.appendLine(`Failed to register language model tool get_terminal_output: ${err instanceof Error ? err.message : String(err)}`);
+      outputChannel.appendLine(`Failed to register language model tool read_terminal_output: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     try {

@@ -1,57 +1,67 @@
 {
-    "typescript.tsc.autoDetect": "off",
-    "editor.bracketPairColorization.enabled": true,
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": "explicit",
-        "source.fixAll": "explicit"
-    },
-    "editor.guides.bracketPairs": "active",
+  "typescript.tsc.autoDetect": "off",
+  "editor.bracketPairColorization.enabled": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit",
+    "source.fixAll": "explicit"
+  },
+  "editor.guides.bracketPairs": "active",
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnPaste": true,
+  "editor.formatOnType": true,
+  "editor.formatOnSave": true,
+  "eslint.enable": true,
+  "eslint.options": {
+    "overrideConfigFile": ".eslintrc.cjs"
+  },
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ],
+  "eslint.workingDirectories": [
+    {
+      "mode": "auto"
+    }
+  ],
+  "files.eol": "\n",
+  "files.exclude": {
+    "out": false,
+    "dist": false
+  },
+  "files.trimTrailingWhitespace": true,
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.formatOnPaste": false,
+    "editor.formatOnType": false
+  },
+  "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "editor.formatOnPaste": true,
-    "editor.formatOnType": true,
-    "editor.formatOnSave": true,
-    "eslint.enable": true,
-    "eslint.options": {
-        "overrideConfigFile": ".eslintrc.cjs"
-    },
-    "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
-    "eslint.workingDirectories": [
-        {
-            "mode": "auto"
-        }
-    ],
-    "files.eol": "\n",
-    "files.exclude": {
-        "out": false,
-        "dist": false
-    },
-    "files.trimTrailingWhitespace": true,
-    "[json]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true
-    },
-    "[jsonc]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true
-    },
-    "[typescript]": {
-        "editor.defaultFormatter": "vscode.typescript-language-features",
-        "editor.codeActionsOnSave": {
-            "source.organizeImports": "explicit",
-            "source.fixAll": "explicit"
-        }
-    },
-    "[typescriptreact]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.codeActionsOnSave": {
-            "source.organizeImports": "explicit",
-            "source.fixAll": "explicit"
-        }
-    },
-    "search.exclude": {
-        "**/node_modules": true,
-        "out": true,
-        "dist": true
-    },
-    "typescript.updateImportsOnFileMove.enabled": "always"
+    "editor.formatOnSave": true
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit"
+    }
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit"
+    }
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "out": true,
+    "dist": true
+  },
+  "typescript.updateImportsOnFileMove.enabled": "always"
 }

@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { TerminalRegistry } from '../../integrations/terminal/TerminalRegistry';
 import { ExecuteCommandTool } from '../../tools/execute_command';
-import { GetTerminalOutputTool } from '../../tools/get_terminal_output';
+import { ReadTerminalOutputTool } from '../../tools/read_terminal_output';
 
 // Testing version of ExecuteCommandTool
 class TestableExecuteCommandTool extends ExecuteCommandTool {
@@ -23,7 +23,7 @@ suite('Get Terminal Output Tool Test Suite', function () {
 
   const tmpDir = path.join(__dirname, '../../test-tmp');
   let execTool: TestableExecuteCommandTool;
-  let getOutputTool: GetTerminalOutputTool;
+  let readOutputTool: ReadTerminalOutputTool;
   let testTerminalId: number;
 
   suiteSetup(async function () {
@@ -36,7 +36,7 @@ suite('Get Terminal Output Tool Test Suite', function () {
 
     // Initialize tools
     execTool = new TestableExecuteCommandTool(tmpDir);
-    getOutputTool = new GetTerminalOutputTool();
+    readOutputTool = new ReadTerminalOutputTool();
 
     console.log('Test setup - created test files');
   });
@@ -74,7 +74,7 @@ suite('Get Terminal Output Tool Test Suite', function () {
     await execTool.execute('echo "This is a specific test output"', undefined, false);
 
     // Get output from the terminal
-    const response = await getOutputTool.execute(testTerminalId);
+    const response = await readOutputTool.execute(testTerminalId);
 
     // Verify the output contains the expected content
     assert.match(response.text, /This is a specific test output/, 'Terminal output should contain the expected command output');
@@ -89,7 +89,7 @@ suite('Get Terminal Output Tool Test Suite', function () {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // Get output with a limit of 10 lines
-    const response = await getOutputTool.execute(testTerminalId, 10);
+    const response = await readOutputTool.execute(testTerminalId, 10);
 
     // Count the number of lines in the response
     const outputLines = response.text.split('\n');
@@ -103,7 +103,7 @@ suite('Get Terminal Output Tool Test Suite', function () {
 
   test('Get output from non-existent terminal', async function () {
     // Try to get output from a non-existent terminal ID
-    const response = await getOutputTool.execute(99999);
+    const response = await readOutputTool.execute(99999);
 
     // Verify we get an appropriate error message
     assert.match(response.text, /not found/, 'Should indicate terminal not found');
@@ -128,7 +128,7 @@ suite('Get Terminal Output Tool Test Suite', function () {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Get output after background command completed
-    const outputResponse = await getOutputTool.execute(bgTerminalId);
+    const outputResponse = await readOutputTool.execute(bgTerminalId);
 
     // Verify we can see both parts of the output
     assert.match(outputResponse.text, /Background command test/, 'Output should contain first part of command');

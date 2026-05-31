@@ -13,6 +13,7 @@ suite('List Directory Tool Test Suite', function () {
 	const tmpDir = path.join(__dirname, '../../test-tmp-list-directory');
 	const sampleDirPath = path.join(tmpDir, 'sample');
 	const nestedDirPath = path.join(sampleDirPath, 'nested');
+	const binaryFilePath = path.join(sampleDirPath, 'sample.bin');
 	const emptyDirPath = path.join(tmpDir, 'empty');
 	const outsideDirPath = path.join(os.tmpdir(), `reliefpilot-list-directory-${Date.now()}`);
 	const copilotSessionWorkspacePath = path.join(
@@ -38,11 +39,15 @@ suite('List Directory Tool Test Suite', function () {
 		await vscode.workspace.fs.createDirectory(vscode.Uri.file(nestedDirPath));
 		await vscode.workspace.fs.writeFile(
 			vscode.Uri.file(path.join(sampleDirPath, 'alpha.txt')),
-			Buffer.from('alpha', 'utf8'),
+			Buffer.from('alpha\nbeta', 'utf8'),
 		);
 		await vscode.workspace.fs.writeFile(
 			vscode.Uri.file(path.join(nestedDirPath, 'child.txt')),
 			Buffer.from('child', 'utf8'),
+		);
+		await vscode.workspace.fs.writeFile(
+			vscode.Uri.file(binaryFilePath),
+			Uint8Array.from([0x4d, 0x5a, 0x00, 0x03, 0x00, 0x00, 0xff, 0xfe]),
 		);
 		await vscode.workspace.fs.createDirectory(vscode.Uri.file(emptyDirPath));
 		await vscode.workspace.fs.createDirectory(vscode.Uri.file(outsideDirPath));
@@ -75,14 +80,14 @@ suite('List Directory Tool Test Suite', function () {
 		const response = await tool.execute({ path: sampleDirPath });
 
 		assert.strictEqual(response.path, sampleDirPath);
-		assert.deepStrictEqual([...response.entries].sort(), ['alpha.txt', 'nested/']);
-		assert.deepStrictEqual(response.text.split('\n').sort(), ['alpha.txt', 'nested/']);
+		assert.deepStrictEqual([...response.entries].sort(), ['alpha.txt (2 lines)', 'nested/', 'sample.bin (binary, 8 bytes)']);
+		assert.deepStrictEqual(response.text.split('\n').sort(), ['alpha.txt (2 lines)', 'nested/', 'sample.bin (binary, 8 bytes)']);
 	});
 
 	test('lists directory contents by file URI', async function () {
 		const response = await tool.execute({ path: vscode.Uri.file(sampleDirPath).toString() });
 
-		assert.deepStrictEqual([...response.entries].sort(), ['alpha.txt', 'nested/']);
+		assert.deepStrictEqual([...response.entries].sort(), ['alpha.txt (2 lines)', 'nested/', 'sample.bin (binary, 8 bytes)']);
 	});
 
 	test('lists directory contents by relative path within the workspace', async function () {
@@ -95,7 +100,7 @@ suite('List Directory Tool Test Suite', function () {
 		const relativePath = path.relative(workspaceRoot, sampleDirPath);
 		const response = await tool.execute({ path: relativePath });
 
-		assert.deepStrictEqual([...response.entries].sort(), ['alpha.txt', 'nested/']);
+		assert.deepStrictEqual([...response.entries].sort(), ['alpha.txt (2 lines)', 'nested/', 'sample.bin (binary, 8 bytes)']);
 	});
 
 	test('returns an empty-folder message for empty directories', async function () {
