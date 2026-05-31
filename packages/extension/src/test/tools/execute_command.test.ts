@@ -113,7 +113,7 @@ suite('Execute Command Tool Test Suite', function () {
       const idMatch = response.text.match(/terminal \(id: "?(\d+)"?\)/);
       assert.ok(idMatch, 'Response should include terminal ID');
       const tid = parseInt(idMatch[1], 10);
-      const outTool = new (require('../../tools/get_terminal_output').GetTerminalOutputTool)();
+      const outTool = new (require('../../tools/read_terminal_output').ReadTerminalOutputTool)();
       const out = await outTool.execute(tid, 100);
       assert.match(out.text, /test content/, 'Terminal output should contain file content');
     } else {
@@ -140,7 +140,7 @@ suite('Execute Command Tool Test Suite', function () {
       const idMatch = response.text.match(/terminal \(id: "?(\d+)"?\)/);
       assert.ok(idMatch, 'Response should include terminal ID');
       const tid = parseInt(idMatch[1], 10);
-      const outTool = new (require('../../tools/get_terminal_output').GetTerminalOutputTool)();
+      const outTool = new (require('../../tools/read_terminal_output').ReadTerminalOutputTool)();
       await new Promise(r => setTimeout(r, 300));
       const out = await outTool.execute(tid, 100);
       assert.match(out.text, /subdir content/, 'Terminal output should contain file content');
@@ -180,7 +180,7 @@ suite('Execute Command Tool Test Suite', function () {
       const idMatch = response.text.match(/terminal \(id: "?(\d+)"?\)/);
       assert.ok(idMatch, 'Response should include terminal ID');
       const tid = parseInt(idMatch[1], 10);
-      const outTool = new (require('../../tools/get_terminal_output').GetTerminalOutputTool)();
+      const outTool = new (require('../../tools/read_terminal_output').ReadTerminalOutputTool)();
       // wait briefly for echo to appear
       await new Promise(r => setTimeout(r, 1000));
       const out = await outTool.execute(tid, 100);
@@ -275,7 +275,7 @@ suite('Execute Command Tool Test Suite', function () {
       // New message wording: "Command started in background and continues in terminal ..."
       assert.match(response.text, /started in background/i, 'Response should mention background execution');
       assert.match(response.text, /terminal \(id: "?\d+"?\)/, 'Response should include terminal ID');
-      assert.match(response.text, /get_terminal_output/, 'Response should mention how to check output later');
+      assert.match(response.text, /read_terminal_output/, 'Response should mention how to check output later');
     });
 
     test('Command should respect timeout parameter', async function () {
@@ -310,7 +310,7 @@ suite('Execute Command Tool Test Suite', function () {
       assert.ok(idMatch, 'Response should include terminal ID');
       if (!/show terminal ID/.test(response.text)) {
         const tid = parseInt(idMatch[1], 10);
-        const outTool = new (require('../../tools/get_terminal_output').GetTerminalOutputTool)();
+        const outTool = new (require('../../tools/read_terminal_output').ReadTerminalOutputTool)();
         await new Promise(r => setTimeout(r, 300));
         const out = await outTool.execute(tid, 100);
         assert.match(out.text, /show terminal ID/, 'Terminal output should contain command result');

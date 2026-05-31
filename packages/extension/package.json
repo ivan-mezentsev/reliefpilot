@@ -450,7 +450,7 @@
       {
         "name": "execute_command",
         "displayName": "Execute command in terminal",
-        "modelDescription": "Execute a command in a VSCode integrated terminal with proper shell integration.\nThis tool provides detailed output and exit status information, and supports:\n- Custom working directory\n- Shell integration for reliable output capture\n- Output compression for large outputs\n- Detailed exit status reporting\n- Flag for potentially destructive commands (destructiveFlag: false to skip confirmation for read-only commands)\n\nIf the latest terminal output is not returned automatically in this tool's result, use get_terminal_output to inspect that terminal.\nIf the command is started with background=true, use get_terminal_output to check what is happening in that terminal later.\n\nWhen running commands that might prompt for user input, include appropriate flags like '-y', '--yes' or 'git --no-pager' etc.\nto prevent interactive prompts from blocking execution.",
+        "modelDescription": "Execute a command in a VSCode integrated terminal with proper shell integration.\nThis tool provides detailed output and exit status information, and supports:\n- Custom working directory\n- Shell integration for reliable output capture\n- Output compression for large outputs\n- Detailed exit status reporting\n- Flag for potentially destructive commands (destructiveFlag: false to skip confirmation for read-only commands)\n\nIf the latest terminal output is not returned automatically in this tool's result, use read_terminal_output to inspect that terminal.\nIf the command is started with background=true, use read_terminal_output to check what is happening in that terminal later.\n\nWhen running commands that might prompt for user input, include appropriate flags like '-y', '--yes' or 'git --no-pager' etc.\nto prevent interactive prompts from blocking execution.",
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "execute_command",
         "icon": "icon.png",
@@ -616,11 +616,11 @@
         }
       },
       {
-        "name": "get_terminal_output",
+        "name": "read_terminal_output",
         "displayName": "Get terminal output",
         "modelDescription": "Retrieve the output from a specific terminal by its ID (default: \"1\").\nUse this after execute_command when the terminal output was not returned automatically,\nor when a command was started in background mode and you need to see what is happening now in that terminal.\nThis tool allows you to check the current or historical output of a terminal.",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "get_terminal_output",
+        "toolReferenceName": "read_terminal_output",
         "icon": "icon.png",
         "inputSchema": {
           "type": "object",

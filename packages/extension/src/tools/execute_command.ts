@@ -1,19 +1,19 @@
 import type {
-  CancellationToken,
-  LanguageModelTool,
-  LanguageModelToolInvocationOptions,
-  LanguageModelToolInvocationPrepareOptions,
-  PreparedToolInvocation,
-} from "vscode"
-import * as vscode from "vscode"
-import { z } from "zod"
-import { TerminalManager } from "../integrations/terminal/TerminalManager"
-import { ConfirmationUI } from "../utils/confirmation_ui"
-import { env } from "../utils/env"
-import { haltForFeedbackController } from "../utils/haltForFeedbackController"
-import { formatResponse, ToolResponse } from "../utils/response"
-import { statusBarActivity } from "../utils/statusBar"
-import { delay } from "../utils/time.js"
+    CancellationToken,
+    LanguageModelTool,
+    LanguageModelToolInvocationOptions,
+    LanguageModelToolInvocationPrepareOptions,
+    PreparedToolInvocation,
+} from "vscode";
+import * as vscode from "vscode";
+import { z } from "zod";
+import { TerminalManager } from "../integrations/terminal/TerminalManager";
+import { ConfirmationUI } from "../utils/confirmation_ui";
+import { env } from "../utils/env";
+import { haltForFeedbackController } from "../utils/haltForFeedbackController";
+import { formatResponse, ToolResponse } from "../utils/response";
+import { statusBarActivity } from "../utils/statusBar";
+import { delay } from "../utils/time.js";
 
 // Local type aliases for stricter typing and clearer intent
 type TerminalId = number
@@ -138,7 +138,7 @@ export class ExecuteCommandTool {
         false,
         formatResponse.toolResult(
           `Command started in background and continues in terminal (id: ${terminalId}). ` +
-          `Use get_terminal_output later to retrieve ongoing output for this terminal.`
+          `Use read_terminal_output later to retrieve ongoing output for this terminal.`
         ),
       ]
     }
@@ -171,7 +171,7 @@ export class ExecuteCommandTool {
       false,
       formatResponse.toolResult(
         `Command still running in terminal (id: ${terminalId})${timeoutNote}.${result ? `\nPartial output:\n${result}` : ""
-        }\n\nUse get_terminal_output to check for more output later.`
+        }\n\nUse read_terminal_output to check for more output later.`
       ),
     ]
   }

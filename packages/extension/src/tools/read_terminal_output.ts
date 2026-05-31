@@ -1,18 +1,18 @@
 import type {
-  CancellationToken,
-  LanguageModelTool,
-  LanguageModelToolInvocationOptions,
-  LanguageModelToolInvocationPrepareOptions,
-  PreparedToolInvocation,
-} from "vscode"
-import * as vscode from "vscode"
-import { z } from "zod"
-import { stripAnsi } from "../integrations/terminal/ansiUtils.js"
-import { TerminalRegistry } from "../integrations/terminal/TerminalRegistry"
-import { env } from "../utils/env"
-import { haltForFeedbackController } from "../utils/haltForFeedbackController"
-import { formatResponse, ToolResponse } from "../utils/response"
-import { statusBarActivity } from "../utils/statusBar"
+    CancellationToken,
+    LanguageModelTool,
+    LanguageModelToolInvocationOptions,
+    LanguageModelToolInvocationPrepareOptions,
+    PreparedToolInvocation,
+} from "vscode";
+import * as vscode from "vscode";
+import { z } from "zod";
+import { stripAnsi } from "../integrations/terminal/ansiUtils.js";
+import { TerminalRegistry } from "../integrations/terminal/TerminalRegistry";
+import { env } from "../utils/env";
+import { haltForFeedbackController } from "../utils/haltForFeedbackController";
+import { formatResponse, ToolResponse } from "../utils/response";
+import { statusBarActivity } from "../utils/statusBar";
 
 // Schema kept string-only for model/tool compatibility. We validate numeric content via regex.
 export const getTerminalOutputSchema = z.object({
@@ -71,7 +71,7 @@ function buildTerminalOutputMessage(
   return `Terminal ${terminalId} output (${state})${last}:\n\n${terminalContents}`
 }
 
-export class GetTerminalOutputTool {
+export class ReadTerminalOutputTool {
   /**
    * Capture output from a VS Code terminal registered in TerminalRegistry.
    * Note: terminalId can be a numeric string (preferred) or number.
@@ -148,7 +148,7 @@ export async function getTerminalOutputToolHandler(
   params: z.infer<typeof getTerminalOutputSchema>,
   token?: CancellationToken,
 ) {
-  const tool = new GetTerminalOutputTool()
+  const tool = new ReadTerminalOutputTool()
   const response = await tool.execute(params.terminalId, params.maxLines, token)
 
   return {
@@ -164,7 +164,7 @@ export class GetTerminalOutputLanguageModelTool implements LanguageModelTool<Get
     options: LanguageModelToolInvocationOptions<GetTerminalOutputInput>,
     token: CancellationToken,
   ): Promise<vscode.LanguageModelToolResult> {
-    statusBarActivity.start('get_terminal_output')
+    statusBarActivity.start('read_terminal_output')
     try {
       // Halt for Feedback gating: must happen before any terminal focus/clipboard/commands.
       let state = haltForFeedbackController.getSnapshot()
@@ -187,7 +187,7 @@ export class GetTerminalOutputLanguageModelTool implements LanguageModelTool<Get
       const parseResult = await getTerminalOutputSchema.safeParseAsync(options.input ?? {})
 
       if (!parseResult.success) {
-        throw new Error(`get_terminal_output invalid arguments: ${parseResult.error.message}`)
+        throw new Error(`read_terminal_output invalid arguments: ${parseResult.error.message}`)
       }
 
       const result = await getTerminalOutputToolHandler(parseResult.data, token)
@@ -201,7 +201,7 @@ export class GetTerminalOutputLanguageModelTool implements LanguageModelTool<Get
 
       return new vscode.LanguageModelToolResult(parts)
     } finally {
-      statusBarActivity.end('get_terminal_output')
+      statusBarActivity.end('read_terminal_output')
     }
   }
 
@@ -221,7 +221,7 @@ export class GetTerminalOutputLanguageModelTool implements LanguageModelTool<Get
 
     const iconUri = vscode.Uri.joinPath(env.extensionUri, 'icon.png')
     md.appendMarkdown(`![Relief Pilot](${iconUri.toString()}|width=10,height=10) `)
-    md.appendMarkdown(`Relief Pilot · **get_terminal_output**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
+    md.appendMarkdown(`Relief Pilot · **read_terminal_output**${showPauseButton ? ' [⏸](command:reliefpilot.haltForFeedback)' : ''}  \n`)
     if (terminalId) md.appendMarkdown(`• Terminal: \`${terminalId}\`  \n`)
     if (typeof maxLines === "number") md.appendMarkdown(`• Max lines: \`${maxLines}\`  \n`)
 
