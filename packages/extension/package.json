@@ -547,14 +547,14 @@
             },
             "type": {
               "type": "array",
-              "description": "File types mapped to --type.",
+              "description": "Ripgrep file type names from rg --type-list. Common extension-like values such as tsx/jsx are normalized; unknown extension-like values are converted to glob filters.",
               "items": {
                 "type": "string"
               }
             },
             "typeNot": {
               "type": "array",
-              "description": "File types mapped to --type-not.",
+              "description": "Ripgrep file type names to exclude via --type-not. Common extension-like values such as tsx/jsx are normalized; unknown extension-like values are converted to exclusion glob filters.",
               "items": {
                 "type": "string"
               }

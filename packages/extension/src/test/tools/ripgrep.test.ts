@@ -115,4 +115,32 @@ suite('Ripgrep Tool Test Suite', function () {
 
 		assert.match(invocationValue, /• Paths: `src, README\.md`/);
 	});
+
+	test('invoke accepts extension-like type filters without passing invalid rg types', async function () {
+		this.timeout(10000);
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		assert.ok(workspaceRoot);
+		const tokenSource = new vscode.CancellationTokenSource();
+
+		try {
+			const result = await lmTool.invoke({
+				input: {
+					pattern: 'reliefpilot-definitely-not-present',
+					paths: [workspaceRoot],
+					fixedStrings: true,
+					detail: 'summary',
+					type: ['ts', 'tsx', 'js', 'jsx', 'unknownext'],
+					typeNot: ['unknownexcludedext'],
+					maxMatches: 1,
+					maxFiles: 1,
+					maxOutputChars: 1000,
+					timeoutMs: 10000,
+				},
+			} as any, tokenSource.token);
+
+			assert.ok(result);
+		} finally {
+			tokenSource.dispose();
+		}
+	});
 });

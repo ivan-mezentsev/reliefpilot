@@ -28,6 +28,43 @@ const RIPGREP_INSTALL_URL = 'https://github.com/BurntSushi/ripgrep?tab=readme-ov
 const uriSchemeRegexp = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 const windowsDriveLetterRegexp = /^[a-zA-Z]:[\\/]/;
 const copilotSessionResourcePathRegexp = /(?:^|[\\/])workspaceStorage[\\/][^\\/]+[\\/]GitHub\.copilot-chat[\\/]chat-session-resources(?:[\\/]|$)/i;
+const extensionLikeTypeRegexp = /^\.?[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+const fallbackRipgrepTypeNames = new Set([
+  'all',
+  'c',
+  'cpp',
+  'cs',
+  'css',
+  'go',
+  'h',
+  'html',
+  'java',
+  'js',
+  'json',
+  'markdown',
+  'md',
+  'php',
+  'py',
+  'python',
+  'ruby',
+  'rust',
+  'sh',
+  'ts',
+  'txt',
+  'typescript',
+  'xml',
+  'yaml',
+]);
+const extensionTypeAliases = new Map<string, string>([
+  ['cjs', 'js'],
+  ['cts', 'ts'],
+  ['jsx', 'js'],
+  ['mjs', 'js'],
+  ['mts', 'ts'],
+  ['tsx', 'ts'],
+]);
+
+let ripgrepTypeNamesPromise: Promise<ReadonlySet<string> | undefined> | undefined;
 
 function looksLikeUri(raw: string): boolean {
   return uriSchemeRegexp.test(raw) && !windowsDriveLetterRegexp.test(raw);
@@ -125,6 +162,125 @@ function formatPathsForInvocation(paths: readonly string[], cwd: string): string
   return formattedPaths.map(pathValue => pathValue.formatted).join(', ');
 }
 
+function normalizeTypeName(rawTypeName: string): string {
+  return rawTypeName.trim().replace(/^\./, '').toLowerCase();
+}
+
+function parseTypeListOutput(output: string): ReadonlySet<string> {
+  const typeNames = new Set<string>(fallbackRipgrepTypeNames);
+  for (const line of output.split(/\r?\n/)) {
+    const separatorIndex = line.indexOf(':');
+    if (separatorIndex > 0) {
+      typeNames.add(line.slice(0, separatorIndex).trim().toLowerCase());
+    }
+  }
+
+  return typeNames;
+}
+
+async function getRipgrepTypeNames(cwd: string, token: CancellationToken): Promise<ReadonlySet<string> | undefined> {
+  if (ripgrepTypeNamesPromise) {
+    return ripgrepTypeNamesPromise;
+  }
+
+  ripgrepTypeNamesPromise = new Promise<ReadonlySet<string> | undefined>((resolve) => {
+    const child = spawn('rg', ['--type-list'], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    let stdout = '';
+    let settled = false;
+
+    const finish = (typeNames: ReadonlySet<string> | undefined) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      subscription.dispose();
+      resolve(typeNames);
+    };
+
+    const subscription = token.onCancellationRequested(() => {
+      try {
+        child.kill();
+      } catch {
+        // Ignore kill failures.
+      }
+      finish(undefined);
+    });
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8');
+    });
+
+    child.on('error', () => finish(undefined));
+    child.on('close', (code) => finish(code === 0 ? parseTypeListOutput(stdout) : undefined));
+  });
+
+  return ripgrepTypeNamesPromise;
+}
+
+function resolveTypeFilter(
+  rawTypeName: string,
+  knownTypeNames: ReadonlySet<string> | undefined,
+  exclude: boolean,
+): { typeName?: string; glob?: string } | undefined {
+  const normalizedTypeName = normalizeTypeName(rawTypeName);
+  if (normalizedTypeName.length === 0) {
+    return undefined;
+  }
+
+  const aliasedTypeName = extensionTypeAliases.get(normalizedTypeName);
+  if (aliasedTypeName) {
+    return { typeName: aliasedTypeName };
+  }
+
+  if (knownTypeNames?.has(normalizedTypeName) || fallbackRipgrepTypeNames.has(normalizedTypeName)) {
+    return { typeName: normalizedTypeName };
+  }
+
+  if (extensionLikeTypeRegexp.test(rawTypeName.trim())) {
+    const glob = `*.${normalizedTypeName}`;
+    return { glob: exclude ? `!${glob}` : glob };
+  }
+
+  return { typeName: rawTypeName.trim() };
+}
+
+function getTypeFilters(
+  rawTypeNames: readonly string[] | undefined,
+  knownTypeNames: ReadonlySet<string> | undefined,
+  exclude: boolean,
+): { typeNames: string[]; globs: string[] } {
+  const typeNames = new Set<string>();
+  const globs: string[] = [];
+
+  if (!Array.isArray(rawTypeNames)) {
+    return { typeNames: [], globs };
+  }
+
+  for (const rawTypeName of rawTypeNames) {
+    if (typeof rawTypeName !== 'string') {
+      continue;
+    }
+
+    const resolved = resolveTypeFilter(rawTypeName, knownTypeNames, exclude);
+    if (!resolved) {
+      continue;
+    }
+
+    if (resolved.typeName) {
+      typeNames.add(resolved.typeName);
+    }
+    if (resolved.glob) {
+      globs.push(resolved.glob);
+    }
+  }
+
+  return { typeNames: [...typeNames], globs };
+}
+
 /**
  * Show a modal asking the user to install ripgrep and wait for a decision.
  * Returns true if the user pressed OK (retry), false if cancelled.
@@ -157,8 +313,8 @@ export const ripgrepInputSchema = z.object({
   caseMode: z.enum(['sensitive', 'ignore', 'smart']).optional().describe('Case matching mode.'),
   detail: z.enum(['summary', 'files', 'lines', 'lines+submatches']).optional().default('lines'),
   glob: z.array(z.string()).optional().describe('Glob patterns mapped to --glob.'),
-  type: z.array(z.string()).optional().describe('File types mapped to --type.'),
-  typeNot: z.array(z.string()).optional().describe('File types mapped to --type-not.'),
+  type: z.array(z.string()).optional().describe('Ripgrep file type names from rg --type-list. Common extension-like values such as tsx/jsx are normalized; unknown extension-like values are converted to glob filters.'),
+  typeNot: z.array(z.string()).optional().describe('Ripgrep file type names to exclude via --type-not. Common extension-like values such as tsx/jsx are normalized; unknown extension-like values are converted to exclusion glob filters.'),
   contextLines: z.number().int().min(0).optional().describe('Context lines mapped to -C.'),
   maxMatches: z.number().int().min(1).optional().default(DEFAULT_LIMITS.maxMatches),
   maxFiles: z.number().int().min(1).optional().default(DEFAULT_LIMITS.maxFiles),
@@ -238,8 +394,10 @@ const decodeTextOrBytes = (value?: { text?: string; bytes?: string }): string | 
   return undefined;
 };
 
-const buildArgs = (input: RipgrepInput): string[] => {
+const buildArgs = (input: RipgrepInput, knownTypeNames?: ReadonlySet<string>): string[] => {
   const args: string[] = ['--json'];
+  const includeTypeFilters = getTypeFilters(input.type, knownTypeNames, false);
+  const excludeTypeFilters = getTypeFilters(input.typeNot, knownTypeNames, true);
 
   if (input.fixedStrings) {
     args.push('-F');
@@ -271,6 +429,10 @@ const buildArgs = (input: RipgrepInput): string[] => {
     args.push('-C', String(input.contextLines));
   }
 
+  for (const glob of [...includeTypeFilters.globs, ...excludeTypeFilters.globs]) {
+    args.push('--glob', glob);
+  }
+
   if (Array.isArray(input.glob)) {
     for (const g of input.glob) {
       if (typeof g === 'string' && g.length > 0) {
@@ -279,20 +441,12 @@ const buildArgs = (input: RipgrepInput): string[] => {
     }
   }
 
-  if (Array.isArray(input.type)) {
-    for (const t of input.type) {
-      if (typeof t === 'string' && t.length > 0) {
-        args.push('--type', t);
-      }
-    }
+  for (const t of includeTypeFilters.typeNames) {
+    args.push('--type', t);
   }
 
-  if (Array.isArray(input.typeNot)) {
-    for (const t of input.typeNot) {
-      if (typeof t === 'string' && t.length > 0) {
-        args.push('--type-not', t);
-      }
-    }
+  for (const t of excludeTypeFilters.typeNames) {
+    args.push('--type-not', t);
   }
 
   args.push('--', input.pattern);
@@ -348,8 +502,9 @@ const runRipgrep = async (
     };
   }
 
-  const args = buildArgs(input);
   const cwd = input.cwd ?? workspaceRoot;
+  const knownTypeNames = await getRipgrepTypeNames(cwd, token);
+  const args = buildArgs(input, knownTypeNames);
 
   const matches: RipgrepMatch[] = [];
   const context: RipgrepContextLine[] = [];
