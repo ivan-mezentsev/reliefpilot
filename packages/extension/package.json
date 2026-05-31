@@ -386,7 +386,7 @@
       {
         "name": "rp_list_directory",
         "displayName": "RP List directory",
-        "modelDescription": "List the contents of a directory. Result will have the name of the child. If the name ends in /, it's a folder, otherwise a file.",
+        "modelDescription": "List the contents of a directory. Result will have the name of each child. If the name ends in /, it's a folder. Text files include their logical line count in parentheses; binary files include a binary marker and size.",
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "rp_list_directory",
         "icon": "icon.png",

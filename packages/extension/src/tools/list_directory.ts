@@ -1,3 +1,4 @@
+import { isBinaryFile } from 'isbinaryfile';
 import * as path from 'node:path';
 import type {
     CancellationToken,
@@ -170,8 +171,66 @@ function tryResolvePathForInvocation(rawPath: string): vscode.Uri | undefined {
 	return vscode.Uri.joinPath(folder.uri, ...trimmed.split(/[\\/]+/).filter(Boolean));
 }
 
-function formatDirectoryEntry(name: string, type: vscode.FileType): string {
-	return `${name}${type === vscode.FileType.Directory ? '/' : ''}`;
+function isDirectoryType(type: vscode.FileType): boolean {
+	return (type & vscode.FileType.Directory) !== 0;
+}
+
+function isFileType(type: vscode.FileType): boolean {
+	return (type & vscode.FileType.File) !== 0;
+}
+
+function countLinesInBytes(content: Uint8Array): number {
+	if (content.byteLength === 0) {
+		return 0;
+	}
+
+	let lineBreaks = 0;
+	for (let index = 0; index < content.byteLength; index += 1) {
+		const byte = content[index];
+		if (byte === 0x0a) {
+			lineBreaks += 1;
+		} else if (byte === 0x0d && content[index + 1] !== 0x0a) {
+			lineBreaks += 1;
+		}
+	}
+
+	const lastByte = content[content.byteLength - 1];
+	return lastByte === 0x0a || lastByte === 0x0d ? lineBreaks : lineBreaks + 1;
+}
+
+function formatLineCount(lineCount: number): string {
+	return `${lineCount} ${lineCount === 1 ? 'line' : 'lines'}`;
+}
+
+function formatBinarySize(byteLength: number): string {
+	if (byteLength < 1024) {
+		return `${byteLength} ${byteLength === 1 ? 'byte' : 'bytes'}`;
+	}
+
+	const kibibytes = byteLength / 1024;
+	if (kibibytes < 1024) {
+		return `${Number.isInteger(kibibytes) ? kibibytes : kibibytes.toFixed(1)} KB`;
+	}
+
+	const mebibytes = kibibytes / 1024;
+	return `${Number.isInteger(mebibytes) ? mebibytes : mebibytes.toFixed(1)} MB`;
+}
+
+async function formatDirectoryEntry(parentUri: vscode.Uri, name: string, type: vscode.FileType): Promise<string> {
+	if (isDirectoryType(type)) {
+		return `${name}/`;
+	}
+
+	if (isFileType(type)) {
+		const content = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(parentUri, name));
+		if (await isBinaryFile(Buffer.from(content))) {
+			return `${name} (binary, ${formatBinarySize(content.byteLength)})`;
+		}
+
+		return `${name} (${formatLineCount(countLinesInBytes(content))})`;
+	}
+
+	return name;
 }
 
 function buildOutsideWorkspaceConfirmation(rawPath: string): vscode.LanguageModelToolConfirmationMessages | undefined {
@@ -210,7 +269,8 @@ export class ListDirectoryTool {
 		}
 
 		const uri = await resolveListDirectoryUri(input.path);
-		const entries = (await vscode.workspace.fs.readDirectory(uri)).map(([name, type]) => formatDirectoryEntry(name, type));
+		const directoryEntries = await vscode.workspace.fs.readDirectory(uri);
+		const entries = await Promise.all(directoryEntries.map(([name, type]) => formatDirectoryEntry(uri, name, type)));
 		const text = entries.length === 0 ? 'Folder is empty' : entries.join('\n');
 		return {
 			text,
