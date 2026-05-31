@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0 - 2026-05-31
+
+- feat(ripgrep): enhance path rendering in invocation messages
+- feat(list_directory): enhance directory listing with file details
+- feat(ripgrep): enhance type filtering with extension-like support
+- feat(extension): rename get_terminal_output to read_terminal_output
+- docs(extension): update README to clarify terminal output function rename
+- docs(omniroute): update OmniRoute integration instructions and model details
+
 ## 1.4.0 - 2026-05-09
 
 - docs(readme): update ripgrep usage instructions for name/path discovery
