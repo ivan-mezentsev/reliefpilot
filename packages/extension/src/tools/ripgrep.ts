@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process';
+import * as path from 'node:path';
 import type {
-  CancellationToken,
-  LanguageModelTool,
-  LanguageModelToolInvocationOptions,
-  LanguageModelToolInvocationPrepareOptions,
-  PreparedToolInvocation,
+    CancellationToken,
+    LanguageModelTool,
+    LanguageModelToolInvocationOptions,
+    LanguageModelToolInvocationPrepareOptions,
+    PreparedToolInvocation,
 } from 'vscode';
 import * as vscode from 'vscode';
 import { z } from 'zod';
@@ -24,6 +25,105 @@ const DEFAULT_LIMITS = {
 const STDERR_MAX_CHARS = 2000;
 
 const RIPGREP_INSTALL_URL = 'https://github.com/BurntSushi/ripgrep?tab=readme-ov-file#installation';
+const uriSchemeRegexp = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+const windowsDriveLetterRegexp = /^[a-zA-Z]:[\\/]/;
+const copilotSessionResourcePathRegexp = /(?:^|[\\/])workspaceStorage[\\/][^\\/]+[\\/]GitHub\.copilot-chat[\\/]chat-session-resources(?:[\\/]|$)/i;
+
+function looksLikeUri(raw: string): boolean {
+  return uriSchemeRegexp.test(raw) && !windowsDriveLetterRegexp.test(raw);
+}
+
+function escapeInlineCode(text: string): string {
+  return text.replace(/`/g, '\\`');
+}
+
+function escapeMarkdownLinkText(text: string): string {
+  return text.replace(/([\\\[\]])/g, '\\$1');
+}
+
+function escapeMarkdownLinkTitle(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function toDisplayPath(uri: vscode.Uri): string {
+  return uri.scheme === 'file' ? uri.fsPath : uri.toString();
+}
+
+function isCopilotSessionResourceUri(uri: vscode.Uri): boolean {
+  if (uri.scheme !== 'file') {
+    return false;
+  }
+
+  return copilotSessionResourcePathRegexp.test(uri.fsPath);
+}
+
+function getFileLinkLabel(uri: vscode.Uri): string {
+  if (uri.scheme === 'file') {
+    return path.basename(uri.fsPath) || uri.fsPath;
+  }
+
+  return path.posix.basename(uri.path) || uri.toString();
+}
+
+function formatMarkdownFileLink(uri: vscode.Uri): string {
+  const label = escapeMarkdownLinkText(getFileLinkLabel(uri));
+  const title = escapeMarkdownLinkTitle(toDisplayPath(uri));
+  return `[${label}](${uri.toString()} "${title}")`;
+}
+
+function getRawPathBasename(rawPath: string): string {
+  const normalized = rawPath.replace(/[\\/]+$/, '');
+  const parts = normalized.split(/[\\/]/);
+  return parts[parts.length - 1] || rawPath;
+}
+
+function isContextFileName(fileName: string): boolean {
+  return /^context\./.test(fileName);
+}
+
+function tryResolvePathForInvocation(rawPath: string, cwd: string): vscode.Uri | undefined {
+  const trimmed = rawPath.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  if (looksLikeUri(trimmed)) {
+    try {
+      return vscode.Uri.parse(trimmed, true);
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (path.isAbsolute(trimmed)) {
+    return vscode.Uri.file(path.normalize(trimmed));
+  }
+
+  if (path.isAbsolute(cwd)) {
+    return vscode.Uri.file(path.resolve(cwd, trimmed));
+  }
+
+  return undefined;
+}
+
+function formatPathForInvocation(pathValue: string, cwd: string): { formatted: string; styled: boolean } {
+  const uri = tryResolvePathForInvocation(pathValue, cwd);
+  const fileName = uri ? getFileLinkLabel(uri) : getRawPathBasename(pathValue);
+  if (uri && (isCopilotSessionResourceUri(uri) || isContextFileName(fileName))) {
+    return { formatted: formatMarkdownFileLink(uri), styled: true };
+  }
+
+  return { formatted: `\`${escapeInlineCode(pathValue)}\``, styled: false };
+}
+
+function formatPathsForInvocation(paths: readonly string[], cwd: string): string {
+  const formattedPaths = paths.map(pathValue => formatPathForInvocation(pathValue, cwd));
+  if (!formattedPaths.some(pathValue => pathValue.styled)) {
+    return `\`${escapeInlineCode(paths.join(', '))}\``;
+  }
+
+  return formattedPaths.map(pathValue => pathValue.formatted).join(', ');
+}
 
 /**
  * Show a modal asking the user to install ripgrep and wait for a decision.
@@ -649,7 +749,7 @@ export class RipgrepLanguageModelTool implements LanguageModelTool<RipgrepInput>
       md.appendMarkdown(`• CWD: \`${cwd}\`  \n`);
     }
     if (paths.length > 0) {
-      md.appendMarkdown(`• Paths: \`${paths.join(', ')}\`  \n`);
+      md.appendMarkdown(`• Paths: ${formatPathsForInvocation(paths, cwd)}  \n`);
     }
     md.appendMarkdown(`• Detail: \`${detail}\`${glob.length > 0 ? ` · glob: \`${glob.join(', ')}\`` : ''}  \n`);
     md.appendMarkdown(`• Limits: matches=${maxMatches}, files=${maxFiles}, outputChars=${maxOutputChars}, timeoutMs=${timeoutMs}  \n`);
