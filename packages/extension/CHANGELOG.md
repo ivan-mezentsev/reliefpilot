@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0 - 2026-07-18
+
+- feat(execute_command): add confirmDestructiveCommands setting to control confirmation of destructive commands
+- feat(execute_command): add ignoreCommandTimeouts setting to override timeout with 1 hour at execution time
+- feat(execute_command): add ignoreBackgroundFlag setting to force blocking mode
+
 ## 1.5.0 - 2026-05-31
 
 - feat(ripgrep): enhance path rendering in invocation messages

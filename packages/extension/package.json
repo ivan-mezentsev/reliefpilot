@@ -3,7 +3,7 @@
   "displayName": "Relief Pilot",
   "description": "A Swiss Army knife for AI agents in VS Code: safer tool calling, human-in-the-loop approvals, and smarter doc fetching to boost productivity and save you money.",
   "publisher": "ivan-mezentsev",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "commonjs",
   "icon": "icon.png",
   "categories": [
@@ -125,10 +125,25 @@
     "configuration": {
       "type": "object",
       "properties": {
+        "reliefpilot.confirmDestructiveCommands": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, commands marked as destructive (destructiveFlag=true) require user confirmation before execution. Set to false to run destructive commands without confirmation."
+        },
         "reliefpilot.confirmNonDestructiveCommands": {
           "type": "boolean",
           "default": false,
           "description": "If true, even commands marked as non-destructive (destructiveFlag=false) will require user confirmation."
+        },
+        "reliefpilot.ignoreCommandTimeouts": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, the timeout provided for execute_command is replaced with 3600000 ms (1 hour) at execution time."
+        },
+        "reliefpilot.ignoreBackgroundFlag": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, the background flag of execute_command is ignored and commands always run in blocking mode."
         },
         "reliefpilot.showPauseButtonInChat": {
           "type": "boolean",
