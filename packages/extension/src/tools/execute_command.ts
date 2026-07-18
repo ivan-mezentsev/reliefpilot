@@ -82,12 +82,24 @@ export class ExecuteCommandTool {
     timeout: number = 300000,
     newTerminal: boolean = false
   ): Promise<[userRejected: boolean, ToolResponse]> {
-    // Read extension setting that optionally forces confirmation for read-only commands
-    const confirmNonDestructiveCommands = vscode.workspace
-      .getConfiguration("reliefpilot")
-      .get<boolean>("confirmNonDestructiveCommands", false)
+    // Read extension settings controlling confirmation, timeout, and background behavior
+    const config = vscode.workspace.getConfiguration("reliefpilot")
+    const confirmDestructiveCommands = config.get<boolean>("confirmDestructiveCommands", true)
+    const confirmNonDestructiveCommands = config.get<boolean>("confirmNonDestructiveCommands", false)
+    const ignoreCommandTimeouts = config.get<boolean>("ignoreCommandTimeouts", false)
+    const ignoreBackgroundFlag = config.get<boolean>("ignoreBackgroundFlag", false)
 
-    const shouldConfirm = destructiveFlag || confirmNonDestructiveCommands
+    // Override timeout with 1 hour when timeouts are ignored (applies only at execution time)
+    if (ignoreCommandTimeouts) {
+      timeout = 3600000
+    }
+
+    // Force blocking mode when the background flag is ignored
+    if (ignoreBackgroundFlag) {
+      background = false
+    }
+
+    const shouldConfirm = destructiveFlag ? confirmDestructiveCommands : confirmNonDestructiveCommands
 
     // Ask user to approve/deny and allow editing when confirmation is required
     if (shouldConfirm) {
